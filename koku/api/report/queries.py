@@ -781,7 +781,6 @@ class ReportQueryHandler(object):
 
         """
         filters = QueryFilterCollection()
-
         # set up filters for instance-type and storage queries.
         filters.add(**self._mapper._report_type_map.get('filter'))
 
@@ -964,7 +963,6 @@ class ReportQueryHandler(object):
 
         if self._delta:
             output['delta'] = self.query_delta
-
         return output
 
     def _transform_data(self, groups, group_index, data):
@@ -1039,6 +1037,7 @@ class ReportQueryHandler(object):
                 query_data = query_data.order_by(*query_order_by)
 
             if query.exists():
+
                 units_value = query.values(self._mapper.units_key)\
                                    .first().get(self._mapper.units_key)
                 query_sum = self.calculate_total(units_value)

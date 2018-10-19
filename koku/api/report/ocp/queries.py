@@ -44,17 +44,6 @@ from reporting.models import (OCPUsageLineItem,
 LOG = logging.getLogger(__name__)
 WILDCARD = '*'
 OPERATION_SUM = 'sum'
-OPERATION_NONE = 'none'
-EXPORT_COLUMNS = ['cost_entry_id', 'cost_entry_bill_id',
-                  'cost_entry_product_id', 'cost_entry_pricing_id',
-                  'cost_entry_reservation_id', 'tags',
-                  'invoice_id', 'line_item_type', 'usage_account_id',
-                  'usage_start', 'usage_end', 'product_code',
-                  'usage_type', 'operation', 'availability_zone',
-                  'usage_amount', 'normalization_factor',
-                  'normalized_usage_amount', 'currency_code',
-                  'unblended_rate', 'unblended_cost', 'blended_rate',
-                  'blended_cost', 'tax_type']
 
 
 class ProviderMap(object):
@@ -76,41 +65,24 @@ class ProviderMap(object):
             OPERATION_SUM: {
                 'annotations': {'cluster': 'cluster_id',
                                 'project': 'namespace',
-                                'node': 'node'},
+                                'cpu_usage': 'pod_usage_cpu_core_seconds',
+                                'cpu_request': 'pod_request_cpu_core_seconds'},
                 'end_date': 'usage_end',
                 'filters': {
-                    'project': {'field': 'account_alias__account_alias',
+                    'project': {'field': 'namespace',
                                 'operation': 'icontains'},
-                    'cluster': {'field': 'product_code',
+                    'cluster': {'field': 'cluster_id',
                                 'operation': 'icontains'},
-                    'pod': {'field': 'availability_zone',
+                    'pod': {'field': 'pod',
                                    'operation': 'icontains'},
                 },
                 'report_type': {
-                    'costs': {
-                        'aggregate_key': 'unblended_cost',
+                    'cpu': {
+                        'aggregate_key': 'pod_usage_cpu_core_seconds',
+                        'cpu_usage': 'pod_usage_cpu_core_seconds',
+                        'cpu_request': 'pod_request_cpu_core_seconds',
                         'count': None,
                         'filter': {},
-                        'units_key': 'currency_code',
-                    },
-                    'instance_type': {
-                        'aggregate_key': 'usage_amount',
-                        'count': 'resource_count',
-                        'filter': {
-                            'field': 'instance_type',
-                            'operation': 'isnull',
-                            'parameter': False
-                        },
-                        'units_key': 'unit',
-                    },
-                    'storage': {
-                        'aggregate_key': 'usage_amount',
-                        'count': None,
-                        'filter': {
-                            'field': 'product_family',
-                            'operation': 'contains',
-                            'parameter': 'Storage'
-                        },
                         'units_key': 'unit',
                     }
                 },
@@ -457,7 +429,6 @@ class OCPReportQueryHandler(object):
         self.time_interval = []
         self.time_scope_units = None
         self.time_scope_value = None
-
         self.query_parameters = query_parameters
         self.tenant = tenant
         self.url_data = url_data
@@ -715,7 +686,6 @@ class OCPReportQueryHandler(object):
 
         """
         filters = QueryFilterCollection()
-
         # set up filters for instance-type and storage queries.
         filters.add(**self._mapper._report_type_map.get('filter'))
 
@@ -748,7 +718,7 @@ class OCPReportQueryHandler(object):
     def _get_group_by(self):
         """Create list for group_by parameters."""
         group_by = []
-        group_by_options = ['service', 'account', 'region', 'avail_zone']
+        group_by_options = ['cluster', 'project', 'node']
         for item in group_by_options:
             group_data = self.get_query_param_data('group_by', item)
             if group_data:
@@ -773,7 +743,6 @@ class OCPReportQueryHandler(object):
         """
         annotations = {
             'date': self.date_trunc('usage_start'),
-            'units': Concat(self._mapper.units_key, Value(''))
         }
         if self._annotations:
             annotations.update(self._annotations)
@@ -931,7 +900,6 @@ class OCPReportQueryHandler(object):
             (Dict): Dictionary response of query params, data, and total
 
         """
-        import pdb; pdb.set_trace()
 
         query_sum = {'value': 0}
         data = []
@@ -950,12 +918,7 @@ class OCPReportQueryHandler(object):
                 query_order_by += (self.order,)
 
             aggregate_key = self._mapper._report_type_map.get('aggregate_key')
-            query_data = query_data.values(*query_group_by)\
-                .annotate(total=Sum(aggregate_key))\
-                .annotate(units=Max(self._mapper.units_key))
-
-            if 'account' in query_group_by:
-                query_data = query_data.annotate(account_alias=F(self._mapper._operation_map.get('alias')))
+            query_data = query_data.values(*query_group_by).annotate(cpu_requests=Sum(aggregate_key))
 
             if self._mapper.count:
                 # This is a sum because the summary table already
@@ -963,7 +926,9 @@ class OCPReportQueryHandler(object):
                 query_data = query_data.annotate(count=Sum(self._mapper.count))
 
             if self._limit:
-                rank_order = getattr(F(self.order_field), self.order_direction)()
+                import pdb; pdb.set_trace()
+
+                rank_order = getattr(F('cpu_requests'), self.order_direction)()
                 dense_rank_by_total = Window(
                     expression=DenseRank(),
                     partition_by=F('date'),
@@ -975,24 +940,25 @@ class OCPReportQueryHandler(object):
             if self.order_field != 'delta':
                 query_data = query_data.order_by(*query_order_by)
 
-            if query.exists():
-                units_value = query.values(self._mapper.units_key)\
-                                   .first().get(self._mapper.units_key)
-                query_sum = self.calculate_total(units_value)
+            #if query.exists():
+            #    units_value = query.values(self._mapper.units_key)\
+            #                   .first().get(self._mapper.units_key)
+            #    query_sum = self.calculate_total(units_value)
 
             if self._delta:
                 query_data = self.add_deltas(query_data, query_sum)
 
             is_csv_output = self._accept_type and 'text/csv' in self._accept_type
+
             if is_csv_output:
                 if self._limit:
                     data = self._ranked_list(list(query_data))
                 else:
                     data = list(query_data)
             else:
+                import pdb; pdb.set_trace()
                 data = self._apply_group_by(list(query_data))
                 data = self._transform_data(query_group_by, 0, data)
-
         self.query_sum = query_sum
         self.query_data = data
         return self._format_query_response()
@@ -1006,7 +972,7 @@ class OCPReportQueryHandler(object):
 
         """
         # import pdb; pdb.set_trace()
-        self.execute_sum_query()
+        return self.execute_sum_query()
 
 
     def _percent_delta(self, a, b):

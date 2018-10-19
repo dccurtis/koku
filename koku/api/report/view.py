@@ -195,6 +195,7 @@ def _generic_report(request, **kwargs):
                                  tenant,
                                  **kwargs)
     output = handler.execute_query()
+    import pdb; pdb.set_trace()
 
     if 'units' in params:
         from_unit = _find_unit()(output['data'])

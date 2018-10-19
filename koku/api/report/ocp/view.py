@@ -195,7 +195,6 @@ def _generic_report(request, provider_parameter_serializer, provider_query_hdlr,
                                   tenant,
                                   **kwargs)
     output = handler.execute_query()
-
     if 'units' in params:
         from_unit = _find_unit()(output['data'])
         if from_unit:
@@ -235,5 +234,5 @@ def cpu(request):
 
     http://localhost:8000/api/v1/reports/ocp/cpu/?filter[time_scope_units]=month&filter[time_scope_value]=-1&filter[resolution]=monthly&filter[limit]=5&group_by[cluster]=*
     """
-    extras = {'report_type': 'instance_type'}
+    extras = {'report_type': 'cpu'}
     return _generic_report(request, OCPQueryParamSerializer, OCPReportQueryHandler, **extras)
