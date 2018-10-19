@@ -66,7 +66,8 @@ class ProviderMap(object):
                 'annotations': {'cluster': 'cluster_id',
                                 'project': 'namespace',
                                 'cpu_usage': 'pod_usage_cpu_core_seconds',
-                                'cpu_request': 'pod_request_cpu_core_seconds'},
+                                'cpu_request': 'pod_request_cpu_core_seconds',
+                                'cpu_limit': 'pod_limit_cpu_cores'},
                 'end_date': 'usage_end',
                 'filters': {
                     'project': {'field': 'namespace',
@@ -81,6 +82,7 @@ class ProviderMap(object):
                         'aggregate_key': 'pod_usage_cpu_core_seconds',
                         'cpu_usage': 'pod_usage_cpu_core_seconds',
                         'cpu_request': 'pod_request_cpu_core_seconds',
+                        'cpu_limit': 'pod_limit_cpu_cores',
                         'count': None,
                         'filter': {},
                         'units_key': 'unit',
@@ -914,11 +916,17 @@ class OCPReportQueryHandler(object):
             query_group_by = ['date'] + self._get_group_by()
 
             query_order_by = ('-date', )
-            if self.order_field != 'delta':
-                query_order_by += (self.order,)
+            # if self.order_field != 'delta':
+                # query_order_by += (self.order,)
 
-            aggregate_key = self._mapper._report_type_map.get('aggregate_key')
-            query_data = query_data.values(*query_group_by).annotate(cpu_requests=Sum(aggregate_key))
+            cpu_usage = self._mapper._report_type_map.get('cpu_usage')
+            cpu_request = self._mapper._report_type_map.get('cpu_request')
+            cpu_limit = self._mapper._report_type_map.get('cpu_limit')
+            query_data = query_data.values(*query_group_by)\
+                .annotate(cpu_usage_core_seconds=Sum(cpu_usage))\
+                .annotate(cpu_requests_core_seconds=Sum(cpu_request))\
+                .annotate(cpu_limit=Sum(cpu_limit))
+
 
             if self._mapper.count:
                 # This is a sum because the summary table already
@@ -926,9 +934,7 @@ class OCPReportQueryHandler(object):
                 query_data = query_data.annotate(count=Sum(self._mapper.count))
 
             if self._limit:
-                import pdb; pdb.set_trace()
-
-                rank_order = getattr(F('cpu_requests'), self.order_direction)()
+                rank_order = getattr(F('project'), self.order_direction)()
                 dense_rank_by_total = Window(
                     expression=DenseRank(),
                     partition_by=F('date'),
@@ -940,10 +946,8 @@ class OCPReportQueryHandler(object):
             if self.order_field != 'delta':
                 query_data = query_data.order_by(*query_order_by)
 
-            #if query.exists():
-            #    units_value = query.values(self._mapper.units_key)\
-            #                   .first().get(self._mapper.units_key)
-            #    query_sum = self.calculate_total(units_value)
+            if query.exists():
+                query_sum = self.calculate_total()
 
             if self._delta:
                 query_data = self.add_deltas(query_data, query_sum)
@@ -956,7 +960,6 @@ class OCPReportQueryHandler(object):
                 else:
                     data = list(query_data)
             else:
-                import pdb; pdb.set_trace()
                 data = self._apply_group_by(list(query_data))
                 data = self._transform_data(query_group_by, 0, data)
         self.query_sum = query_sum
@@ -1075,7 +1078,7 @@ class OCPReportQueryHandler(object):
 
         return previous_dict
 
-    def calculate_total(self, units_value):
+    def calculate_total(self):
         """Calculate aggregated totals for the query.
 
         Args:
@@ -1085,6 +1088,7 @@ class OCPReportQueryHandler(object):
             (dict) The aggregated totals for the query
 
         """
+        return {'cpu_usage_core_seconds': 1, 'cpu_requests_core_seconds': 2}
         filt_collection = QueryFilterCollection()
         total_filter = self._get_search_filter(filt_collection)
 
@@ -1112,6 +1116,5 @@ class OCPReportQueryHandler(object):
             )
         else:
             query_sum = total_query.aggregate(value=Sum(aggregate_key))
-        query_sum['units'] = units_value
 
         return query_sum

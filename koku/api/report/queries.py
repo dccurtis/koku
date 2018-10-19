@@ -1234,5 +1234,4 @@ class ReportQueryHandler(object):
         else:
             query_sum = total_query.aggregate(value=Sum(aggregate_key))
         query_sum['units'] = units_value
-
         return query_sum
