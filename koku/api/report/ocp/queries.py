@@ -1106,15 +1106,10 @@ class OCPReportQueryHandler(object):
         q_table = self._mapper._operation_map.get('tables').get('total')
         total_query = q_table.objects.filter(total_filter)
 
-        aggregate_key = self._mapper._report_type_map.get('aggregate_key')
-        if self._mapper.count:
-            query_sum = total_query.aggregate(
-                value=Sum(aggregate_key),
-                # This is a sum because the summary table already
-                # has already performed counts
-                count=Sum(self._mapper.count)
-            )
-        else:
-            query_sum = total_query.aggregate(value=Sum(aggregate_key))
-
-        return query_sum
+        cpu_usage_key = self._mapper._report_type_map.get('cpu_usage')
+        cpu_request_key = self._mapper._report_type_map.get('cpu_request')
+        cpu_usage_sum = total_query.aggregate(cpu_usage=Sum(cpu_usage_key))
+        cpu_request_sum = total_query.aggregate(cpu_request=Sum(cpu_request_key))
+        
+        return {'cpu_usage_core_seconds': cpu_usage_sum.get('cpu_usage'),
+                'cpu_requests_core_seconds': cpu_request_sum.get('cpu_request')}
