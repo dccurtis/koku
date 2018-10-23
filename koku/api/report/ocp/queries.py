@@ -755,7 +755,6 @@ class OCPReportQueryHandler(object):
 
         for q_param, db_field in fields.items():
             annotations[q_param] = Concat(db_field, Value(''))
-        # import pdb; pdb.set_trace()
         return annotations
 
     @staticmethod
@@ -805,7 +804,7 @@ class OCPReportQueryHandler(object):
             if other is None:
                 other = copy.deepcopy(data)
             rank = data.get('rank')
-            if rank <= self._limit:
+            if rank and rank <= self._limit:
                 del data['rank']
                 ranked_list.append(data)
             else:
@@ -816,7 +815,8 @@ class OCPReportQueryHandler(object):
 
         if other is not None and others_list:
             other['total'] = other_sum
-            del other['rank']
+            if other.get('rank'):
+                del other['rank']
             group_by = self._get_group_by()
             for group in group_by:
                 other[group] = 'Other'
@@ -913,7 +913,8 @@ class OCPReportQueryHandler(object):
             query_annotations = self._get_annotations()
             query_data = query.annotate(**query_annotations)
 
-            query_group_by = ['date'] + self._get_group_by()
+            group_by_value = self._get_group_by()
+            query_group_by = ['date'] + group_by_value
 
             query_order_by = ('-date', )
             # if self.order_field != 'delta':
@@ -927,14 +928,13 @@ class OCPReportQueryHandler(object):
                 .annotate(cpu_requests_core_seconds=Sum(cpu_request))\
                 .annotate(cpu_limit=Sum(cpu_limit))
 
-
             if self._mapper.count:
                 # This is a sum because the summary table already
                 # has already performed counts
                 query_data = query_data.annotate(count=Sum(self._mapper.count))
 
-            if self._limit:
-                rank_order = getattr(F('project'), self.order_direction)()
+            if self._limit and group_by_value:
+                rank_order = getattr(F(group_by_value.pop()), self.order_direction)()
                 dense_rank_by_total = Window(
                     expression=DenseRank(),
                     partition_by=F('date'),
@@ -974,7 +974,6 @@ class OCPReportQueryHandler(object):
             (Dict): Dictionary response of query params, data, and total
 
         """
-        # import pdb; pdb.set_trace()
         return self.execute_sum_query()
 
 
@@ -1053,6 +1052,8 @@ class OCPReportQueryHandler(object):
             (dict) A dictionary keyed off the grouped values for the report
 
         """
+        import pdb; pdb.set_trace()
+
         if self.time_scope_value in [-1, -2]:
             date_delta = relativedelta.relativedelta(months=1)
         elif self.time_scope_value == -30:
@@ -1063,10 +1064,10 @@ class OCPReportQueryHandler(object):
         # e.g. date, account, region, availability zone, et cetera
         query_annotations = self._get_annotations()
         previous_sums = previous_query.annotate(**query_annotations)
-        aggregate_key = self._mapper._report_type_map.get('aggregate_key')
+        cpu_usage = self._mapper._report_type_map.get('cpu_usage')
         previous_sums = previous_sums\
             .values(*query_group_by)\
-            .annotate(total=Sum(aggregate_key))
+            .annotate(total=Sum(cpu_usage))
 
         previous_dict = OrderedDict()
         for row in previous_sums:
@@ -1088,15 +1089,14 @@ class OCPReportQueryHandler(object):
             (dict) The aggregated totals for the query
 
         """
-        return {'cpu_usage_core_seconds': 1, 'cpu_requests_core_seconds': 2}
+        # return {'cpu_usage_core_seconds': 1, 'cpu_requests_core_seconds': 2}
         filt_collection = QueryFilterCollection()
         total_filter = self._get_search_filter(filt_collection)
 
         time_scope_value = self.get_query_param_data('filter',
                                                      'time_scope_value',
                                                      -10)
-        time_and_report_filter = Q(time_scope_value=time_scope_value) & \
-            Q(report_type=self._report_type)
+        time_and_report_filter = Q(time_scope_value=time_scope_value)
 
         if total_filter is None:
             total_filter = time_and_report_filter
