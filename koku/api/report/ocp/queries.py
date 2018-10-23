@@ -1089,7 +1089,6 @@ class OCPReportQueryHandler(object):
             (dict) The aggregated totals for the query
 
         """
-        # return {'cpu_usage_core_seconds': 1, 'cpu_requests_core_seconds': 2}
         filt_collection = QueryFilterCollection()
         total_filter = self._get_search_filter(filt_collection)
 
