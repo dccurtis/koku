@@ -71,6 +71,9 @@ class ReportQueryHandlerBase(object):
         self.tenant = tenant
         self._mapper = mapper
 
+        self.start_datetime = None
+        self.end_datetime = None
+
         self.resolution = None
         self.time_scope_units = None
         self.time_scope_value = None
