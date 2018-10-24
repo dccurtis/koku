@@ -186,7 +186,6 @@ def _generic_report(request, provider_parameter_serializer, provider_query_hdlr,
                                   tenant,
                                   **kwargs)
     output = handler.execute_query()
-    import pdb; pdb.set_trace()
 
     if 'units' in params:
         from_unit = _find_unit()(output['data'])

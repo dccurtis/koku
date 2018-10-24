@@ -1052,8 +1052,6 @@ class OCPReportQueryHandler(object):
             (dict) A dictionary keyed off the grouped values for the report
 
         """
-        import pdb; pdb.set_trace()
-
         if self.time_scope_value in [-1, -2]:
             date_delta = relativedelta.relativedelta(months=1)
         elif self.time_scope_value == -30:
