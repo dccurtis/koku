@@ -37,7 +37,7 @@ from tenant_schemas.utils import tenant_context
 
 from api.utils import DateHelper
 from reporting.models import (OCPUsageLineItem,
-                              OCPUsageLineItemDaily,
+                              OCPUsageLineItemDailySummary,
                               OCPUsageLineItemAggregates)
 
 
@@ -65,8 +65,8 @@ class ProviderMap(object):
             OPERATION_SUM: {
                 'annotations': {'cluster': 'cluster_id',
                                 'project': 'namespace',
-                                'cpu_usage': 'pod_usage_cpu_core_seconds',
-                                'cpu_request': 'pod_request_cpu_core_seconds',
+                                'cpu_usage': 'pod_usage_cpu_core_hours',
+                                'cpu_request': 'pod_request_cpu_core_hours',
                                 'cpu_limit': 'pod_limit_cpu_cores'},
                 'end_date': 'usage_end',
                 'filters': {
@@ -79,9 +79,9 @@ class ProviderMap(object):
                 },
                 'report_type': {
                     'cpu': {
-                        'aggregate_key': 'pod_usage_cpu_core_seconds',
-                        'cpu_usage': 'pod_usage_cpu_core_seconds',
-                        'cpu_request': 'pod_request_cpu_core_seconds',
+                        'aggregate_key': 'pod_usage_cpu_core_hours',
+                        'cpu_usage': 'pod_usage_cpu_core_hours',
+                        'cpu_request': 'pod_request_cpu_core_hours',
                         'cpu_limit': 'pod_limit_cpu_cores',
                         'count': None,
                         'filter': {},
@@ -89,8 +89,8 @@ class ProviderMap(object):
                     }
                 },
                 'start_date': 'usage_start',
-                'tables': {'previous_query': OCPUsageLineItemDaily,
-                           'query': OCPUsageLineItemDaily,
+                'tables': {'previous_query': OCPUsageLineItemDailySummary,
+                           'query': OCPUsageLineItemDailySummary,
                            'total': OCPUsageLineItemAggregates},
             },
         },
