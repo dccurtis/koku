@@ -78,6 +78,7 @@ class ReportQueryHandlerBase(object):
         self.time_scope_units = None
         self.time_scope_value = None
 
+        self.time_interval = []
         self._get_timeframe()
 
     @staticmethod

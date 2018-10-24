@@ -237,6 +237,7 @@ class AWSReportQueryHandler(ReportQueryHandlerBase):
         """
         LOG.debug(f'Query Params: {query_parameters}')
 
+        self._group_by = None
         if kwargs:
             elements = ['accept_type', 'annotations', 'delta',
                         'group_by', 'report_type']
@@ -259,8 +260,6 @@ class AWSReportQueryHandler(ReportQueryHandlerBase):
 
         self._accept_type = None
         self._annotations = None
-        self._group_by = None
-        self.time_interval = []
 
         self._group_by_options = ['service', 'account', 'region', 'avail_zone']
         self._delta = self.query_parameters.get('delta')
@@ -519,7 +518,6 @@ class AWSReportQueryHandler(ReportQueryHandlerBase):
             query_order_by = ('-date', )
             if self.order_field != 'delta':
                 query_order_by += (self.order,)
-            import pdb; pdb.set_trace()
             aggregate_key = self._mapper._report_type_map.get('aggregate_key')
             query_data = query_data.values(*query_group_by)\
                 .annotate(total=Sum(aggregate_key))\
