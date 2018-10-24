@@ -40,7 +40,7 @@ def memory(request):
 
 
     """
-    extras = {'report_type': 'instance_type'}
+    extras = {'report_type': 'memory'}
     return _generic_report(request, OCPQueryParamSerializer, OCPReportQueryHandler, **extras)
 
 @api_view(http_method_names=['GET'])
