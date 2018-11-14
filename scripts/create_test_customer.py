@@ -115,6 +115,16 @@ class KokuCustomerOnboarder:
             conn.commit()
             print('Created provider authentication')
 
+            auth_ocp_sql = """
+                INSERT INTO api_providerauthentication (uuid, provider_resource_name)
+                    VALUES ('5e421052-8e16-4f66-93d4-27223c4673f2', '{resource}')
+                ;
+            """.format(resource='my-ocp-cluster-1')
+
+            cursor.execute(auth_ocp_sql)
+            conn.commit()
+            print('Created provider authentication')
+
             billing_sql = """
                 INSERT INTO api_providerbillingsource (uuid, bucket)
                     VALUES ('75b17096-319a-45ec-92c1-18dbd5e78f94', '{bucket}')
@@ -132,8 +142,16 @@ class KokuCustomerOnboarder:
             """.format(name=self.customer.get('provider_name'))
 
             cursor.execute(provider_sql)
+
+            provider_ocp_sql = """
+            INSERT INTO api_provider (uuid, name, type, authentication_id, created_by_id, customer_id, setup_complete)
+                    VALUES('3c6e687e-1a09-4a05-970c-2ccf44b0952e', '{name}', 'OCP', 2, 1, 1, False)
+                ;
+            """.format(name='ocp_provider')
+
+            cursor.execute(provider_ocp_sql)
             conn.commit()
-            print('Created provider')
+            print('Created OCP provider')
 
     def get_headers(self, token):
         """returns HTTP Token Auth header"""

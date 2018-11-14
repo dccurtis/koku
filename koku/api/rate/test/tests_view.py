@@ -27,7 +27,7 @@ from tenant_schemas.utils import tenant_context
 
 from api.iam.test.iam_test_case import IamTestCase
 from api.rate.serializers import RateSerializer
-from ..models import Rate, TIMEUNITS
+from ..reporting.rate.models, TIMEUNITS
 
 
 class RateViewTests(IamTestCase):
