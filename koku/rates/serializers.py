@@ -37,6 +37,14 @@ class FixedRateSerializer(serializers.Serializer):
             raise serializers.ValidationError('A fixed rate value must be positive.')
         return str(value)
 
+class TierRateSerializer(serializers.Serializer):
+    """Serializer for Fixed Rate."""
+
+    value = serializers.DecimalField(required=False, max_digits=19, decimal_places=10)
+    usage_start = serializers.DecimalField(required=False, max_digits=19, decimal_places=10)
+    usage_end = serializers.DecimalField(required=False, max_digits=19, decimal_places=10)
+    unit = serializers.ChoiceField(choices=CURRENCY_CHOICES)
+
 
 class RateSerializer(serializers.Serializer):
     """Rate Serializer."""
@@ -44,8 +52,9 @@ class RateSerializer(serializers.Serializer):
     uuid = serializers.UUIDField(read_only=True)
     provider = serializers.PrimaryKeyRelatedField(queryset=Provider.objects.all())
     metric = serializers.ChoiceField(choices=Rate.METRIC_CHOICES,
-                                     required=True)
-    fixed_rate = FixedRateSerializer()
+                                     required=False)
+    # fixed_rate = FixedRateSerializer()
+    tier = TierRateSerializer()
 
     def to_representation(self, rate):
         """Create external representation of a rate."""
