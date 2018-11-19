@@ -52,9 +52,10 @@ class RateSerializer(serializers.Serializer):
     uuid = serializers.UUIDField(read_only=True)
     provider = serializers.PrimaryKeyRelatedField(queryset=Provider.objects.all())
     metric = serializers.ChoiceField(choices=Rate.METRIC_CHOICES,
-                                     required=False)
+                                     required=True)
+    rates = serializers.JSONField(required=True)
     # fixed_rate = FixedRateSerializer()
-    tier = TierRateSerializer()
+    # tier = TierRateSerializer()
 
     def to_representation(self, rate):
         """Create external representation of a rate."""
