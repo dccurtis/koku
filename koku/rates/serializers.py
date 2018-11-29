@@ -47,21 +47,8 @@ class UUIDKeyRelatedField(serializers.PrimaryKeyRelatedField):
         return instance.uuid
 
 
-class FixedRateSerializer(serializers.Serializer):
-    """Serializer for Fixed Rate."""
-
-    value = serializers.DecimalField(required=True, max_digits=19, decimal_places=10)
-    unit = serializers.ChoiceField(choices=CURRENCY_CHOICES)
-
-    def validate_value(self, value):
-        """Check that value is a positive value."""
-        if value <= 0:
-            raise serializers.ValidationError('A fixed rate value must be positive.')
-        return str(value)
-
-
-class TieredRateSerializer(serializers.Serializer):
-    """Serializer for Tiered Rate."""
+class VariableRateSerializer(serializers.Serializer):
+    """Serializer for Variable Rate."""
 
     value = serializers.DecimalField(required=False, max_digits=19, decimal_places=10)
     usage_start = serializers.DecimalField(required=False, max_digits=19, decimal_places=10)
@@ -105,9 +92,13 @@ class RateSerializer(serializers.ModelSerializer):
     provider_uuid = UUIDKeyRelatedField(queryset=Provider.objects.all(), pk_field='uuid')
     metric = serializers.ChoiceField(choices=Rate.METRIC_CHOICES,
                                      required=True)
-    fixed_rate = FixedRateSerializer(required=False)
-    tiered_rate = TieredRateSerializer(required=False, many=True)
+    value = serializers.DecimalField(required=False, max_digits=19, decimal_places=10)
+    usage_start = serializers.DecimalField(required=False, max_digits=19, decimal_places=10)
+    usage_end = serializers.DecimalField(required=False, max_digits=19, decimal_places=10)
+    unit = serializers.ChoiceField(choices=CURRENCY_CHOICES)
 
+    #variable_rate = VariableRateSerializer(required=False, many=True)
+    #variable_rate = serializers.JSONField()
     @staticmethod
     def _convert_to_decimal(rate):
         for decimal_key in RateSerializer.DECIMALS:
@@ -125,11 +116,11 @@ class RateSerializer(serializers.ModelSerializer):
 
     def validate(self, data):
         """Validate that a rate must be defined."""
-        rate_keys = ('fixed_rate', 'tiered_rate')
+        rate_keys = ('variable_rate')
         if any(data.get(rate_key) is not None for rate_key in rate_keys):
             return data
         else:
-            raise serializers.ValidationError('A rated must be provided (e.g. fixed_rate, tiered_rate).')
+            raise serializers.ValidationError('A rated must be provided (e.g. variable_rate).')
 
     def to_representation(self, rate):
         """Create external representation of a rate."""
@@ -168,4 +159,4 @@ class RateSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Rate
-        fields = ('uuid', 'provider_uuid', 'metric', 'fixed_rate', 'tiered_rate')
+        fields = ('uuid', 'provider_uuid', 'metric', 'value', 'usage_start', 'usage_end', 'unit')
