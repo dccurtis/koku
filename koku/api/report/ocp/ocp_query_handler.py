@@ -23,6 +23,7 @@ from django.db.models import F, Value, Window
 from django.db.models.functions import (Coalesce, Concat, RowNumber)
 from tenant_schemas.utils import tenant_context
 
+from api.query_filter import QueryFilter
 from api.report.queries import ReportQueryHandler
 
 
@@ -42,6 +43,7 @@ class OCPReportQueryHandler(ReportQueryHandler):
             kwargs    (Dict): A dictionary for internal query alteration based on path
         """
         kwargs['provider'] = 'OCP'
+        kwargs['no_tag_query'] = QueryFilter(operation='pod_labels__iexact', parameter='{}')
         super().__init__(query_parameters, url_data,
                          tenant, self.group_by_options, **kwargs)
 

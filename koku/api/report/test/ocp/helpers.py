@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 """Test the OCPReportQueryHandler base class."""
+import copy
 import hashlib
 import random
 from decimal import Decimal
@@ -227,7 +228,7 @@ class OCPReportDataGenerator:
         """Create OCP hourly usage line items."""
         node_cpu_cores = random.randint(1, 8)
         node_memory_gb = random.randint(4, 32)
-        for row in self.line_items:
+        for num, row in enumerate(self.line_items):
             data = {
                 'report_period': report_period,
                 'report': report,
@@ -244,7 +245,7 @@ class OCPReportDataGenerator:
                 'node_capacity_cpu_core_seconds': Decimal(node_cpu_cores * 3600),
                 'node_capacity_memory_bytes': Decimal(node_memory_gb * 1e9),
                 'node_capacity_memory_byte_seconds': Decimal(node_memory_gb * 1e9 * 3600),
-                'pod_labels': self._gen_pod_labels(report)
+                'pod_labels': {} if num == 1 else self._gen_pod_labels(report)
             }
             line_item = OCPUsageLineItem(**data)
             line_item.save()
