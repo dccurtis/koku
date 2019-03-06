@@ -29,6 +29,7 @@ from tenant_schemas.utils import tenant_context
 from api.models import Tenant, User
 from api.report.aws.aws_query_handler import AWSReportQueryHandler
 from api.report.aws.serializers import QueryParamSerializer
+from api.report.aws.storage_serializers import AWSStorageQueryParamSerializer
 from api.report.ocp.ocp_query_handler import OCPReportQueryHandler
 from api.report.ocp.serializers import (OCPChargeQueryParamSerializer,
                                         OCPInventoryQueryParamSerializer)
@@ -59,6 +60,12 @@ class ClassMapper(object):
                 {
                     'report': 'default',
                     'serializer': QueryParamSerializer,
+                    'query_handler': AWSReportQueryHandler,
+                    'tag_handler': [AWSTagsSummary]
+                },
+                {
+                    'report': 'storage',
+                    'serializer': AWSStorageQueryParamSerializer,
                     'query_handler': AWSReportQueryHandler,
                     'tag_handler': [AWSTagsSummary]
                 },
