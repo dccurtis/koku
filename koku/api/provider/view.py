@@ -329,8 +329,10 @@ class ProviderViewSet(mixins.CreateModelMixin,
 
         get_object_or_404(Provider, uuid=uuid)
         manager = ProviderManager(uuid)
+        force_delete = request.query_params.get('force', False)
         try:
-            manager.remove(request.user)
+            tenant = get_tenant(request.user)
+            manager.remove(request.user, tenant, force_delete)
         except Exception:
             LOG.error('{} failed to remove provider uuid: {}.'.format(request.user, uuid))
             raise ProviderDeleteException

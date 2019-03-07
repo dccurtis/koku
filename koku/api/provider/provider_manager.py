@@ -16,6 +16,7 @@
 #
 """Management capabilities for Provider functionality."""
 
+from datetime import datetime
 import logging
 
 import requests
@@ -67,6 +68,32 @@ class ProviderManager:
     def is_removable_by_user(self, current_user):
         """Determine if the current_user can remove the provider."""
         return self.model.customer == current_user.customer
+
+    def is_processing_in_progress(self, tenant):
+        """Determine if masu processing is in progress."""
+        stats = self.provider_statistics(tenant)
+
+        current_month = str(datetime.today().date().replace(day=1))
+        month_stats = stats.get(current_month)
+
+        for stat in month_stats:
+
+            files_processed = stat.get('files_processed')
+            if files_processed:
+                processed_cnt, total_cnt = files_processed.split('/')
+                if processed_cnt != total_cnt:
+                    LOG.error('Not all report files have been processed for provider %s.', self._uuid)
+                    return True
+
+            if stat.get('last_process_complete_date') is None:
+                LOG.error('Line item processing not complete for provider %s.', self._uuid)
+                return True
+
+            if stat.get('summary_data_updated_datetime') is None:
+                LOG.error('Summary processing not complete for provider %s.', self._uuid)
+                return True
+
+        return False
 
     def _get_tenant_provider_stats(self, provider, tenant, period_start):
         """Return provider statistics for schema."""
@@ -132,8 +159,12 @@ class ProviderManager:
         return provider_stats
 
     @transaction.atomic
-    def remove(self, current_user, customer_remove_context=False):
+    def remove(self, current_user, tenant, force_delete=False):
         """Remove the provider with current_user."""
+        if force_delete is False and self.is_processing_in_progress(tenant):
+            err_msg = 'Processing in progress.  Unable to delete provider {}.'.format(self._uuid)
+            raise ProviderManagerError(err_msg)
+
         if self.is_removable_by_user(current_user):
             authentication_model = self.model.authentication
             billing_source = self.model.billing_source
