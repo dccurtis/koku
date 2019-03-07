@@ -30,12 +30,15 @@ class AWSStorageGroupBySerializer(GroupBySerializer):
     SERVICE_CHOICES = (
         ('S3', 'S3'),
         ('Glacier', 'Glacier'),
-        ('RDS', 'RDS')
+        ('RDS', 'RDS'),
+        ('*', '*')
     )
 
     services = serializers.ChoiceField(choices=SERVICE_CHOICES,
                                        required=False)
-
+    def __init__(self, *args, **kwargs):
+        """Initialize the GroupBySerializer."""
+        super().__init__(*args, **kwargs)
 
 class AWSStorageOrderBySerializer(OrderBySerializer):
     """Serializer for handling query parameter order_by."""
@@ -54,12 +57,14 @@ class AWSStorageFilterSerializer(FilterSerializer):
     SERVICE_CHOICES = (
         ('S3', 'S3'),
         ('Glacier', 'Glacier'),
-        ('RDS', 'RDS')
+        ('RDS', 'RDS'),
+        ('*', '*')
     )
-
-    services = serializers.ChoiceField(choices=SERVICE_CHOICES,
-                                       required=False)
-
+    service = serializers.ChoiceField(choices=SERVICE_CHOICES,
+                                        required=False)
+    def __init__(self, *args, **kwargs):
+        """Initialize the FilterSerializer."""
+        super().__init__(*args, **kwargs)
 
 class AWSStorageQueryParamSerializer(QueryParamSerializer):
     """Serializer for handling query parameters."""
@@ -89,7 +94,6 @@ class AWSStorageQueryParamSerializer(QueryParamSerializer):
         Raises:
             (ValidationError): if group_by field inputs are invalid
         """
-        import pdb; pdb.set_trace()
         validate_field(self, 'group_by', AWSStorageGroupBySerializer, value,
                        tag_keys=self.tag_keys)
         return value
@@ -117,6 +121,8 @@ class AWSStorageQueryParamSerializer(QueryParamSerializer):
         Raises:
             (ValidationError): if filter field inputs are invalid
         """
+        # import pdb; pdb.set_trace()
         validate_field(self, 'filter', AWSStorageFilterSerializer, value,
                        tag_keys=self.tag_keys)
+        value.update(service=[value.get('service')])
         return value

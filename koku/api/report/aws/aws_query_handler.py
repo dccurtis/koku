@@ -144,7 +144,7 @@ class AWSReportQueryHandler(ReportQueryHandler):
 
             annotations = self._mapper.report_type_map.get('annotations')
             query_data = query_data.values(*query_group_by).annotate(**annotations)
-
+            import pdb; pdb.set_trace()
             if 'account' in query_group_by:
                 query_data = query_data.annotate(account_alias=Coalesce(
                     F(self._mapper.provider_map.get('alias')), 'usage_account_id'))

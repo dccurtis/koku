@@ -945,7 +945,7 @@ class ReportQueryHandler(QueryHandler):
 
         # set up filters for instance-type and storage queries.
         filters.add(**self._mapper._report_type_map.get('filter'))
-
+        import pdb; pdb.set_trace()
         # define filter parameters using API query params.
         composed_filters = self._get_search_filter(filters)
 
