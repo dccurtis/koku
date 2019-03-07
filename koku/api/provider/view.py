@@ -48,6 +48,17 @@ class ProviderDeleteException(APIException):
         self.detail = {'detail': force_text(self.default_detail)}
 
 
+class ProviderUnableDeleteException(APIException):
+    """Provider deletion custom internal error exception."""
+
+    default_detail = 'Error removing provider.  Try again after processing is complete.'
+
+    def __init__(self):
+        """Initialize with status code 409."""
+        self.status_code = status.HTTP_409_CONFLICT
+        self.detail = {'detail': force_text(self.default_detail)}
+
+
 class ProviderViewSet(mixins.CreateModelMixin,
                       mixins.DestroyModelMixin,
                       mixins.ListModelMixin,
@@ -332,7 +343,9 @@ class ProviderViewSet(mixins.CreateModelMixin,
         force_delete = request.query_params.get('force', False)
         try:
             tenant = get_tenant(request.user)
-            manager.remove(request.user, tenant, force_delete)
+            if not force_delete and manager.is_processing_in_progress(tenant):
+                raise ProviderUnableDeleteException
+            manager.remove(request.user)
         except Exception:
             LOG.error('{} failed to remove provider uuid: {}.'.format(request.user, uuid))
             raise ProviderDeleteException

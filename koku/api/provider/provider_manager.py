@@ -16,8 +16,8 @@
 #
 """Management capabilities for Provider functionality."""
 
-from datetime import datetime
 import logging
+from datetime import datetime
 
 import requests
 from django.conf import settings
@@ -159,12 +159,8 @@ class ProviderManager:
         return provider_stats
 
     @transaction.atomic
-    def remove(self, current_user, tenant, force_delete=False):
+    def remove(self, current_user, customer_remove_context=False):
         """Remove the provider with current_user."""
-        if force_delete is False and self.is_processing_in_progress(tenant):
-            err_msg = 'Processing in progress.  Unable to delete provider {}.'.format(self._uuid)
-            raise ProviderManagerError(err_msg)
-
         if self.is_removable_by_user(current_user):
             authentication_model = self.model.authentication
             billing_source = self.model.billing_source
