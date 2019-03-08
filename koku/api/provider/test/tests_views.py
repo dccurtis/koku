@@ -223,6 +223,7 @@ class ProviderViewTest(IamTestCase):
         # Remove Provider as the regular user that created the Provider
         url = reverse('provider-detail', args=[json_result.get('uuid')])
         client = APIClient()
+
         response = client.delete(url, **self.headers)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
 

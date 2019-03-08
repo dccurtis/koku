@@ -387,12 +387,10 @@ class ProviderManagerTest(IamTestCase):
         self.assertFalse(manager.is_processing_in_progress(self.tenant))
 
 
-    @patch('api.provider.provider_manager.ProviderManager.provider_statistics')
-    def test_provider_is_processing_in_progress_missing_file(self, mock_provider_statistics):
+    def test_provider_is_processing_in_progress_missing_file(self):
         """Test is_processing_in_progress when 1/2 files are processed."""
         # Create Provider
         current_month = datetime.today().date().replace(day=1)
-        last_month = current_month + relativedelta.relativedelta(months=-1)
         stats_response = {}
         stats_response[str(current_month)] = [{'assembly_id': '1f54e1ec-1dc3-4626-ba96-e5a812279a08',
                                                'billing_period_start': current_month,
@@ -401,7 +399,7 @@ class ProviderManagerTest(IamTestCase):
                                                'last_process_complete_date': '2019-03-04 00:00:00',
                                                'summary_data_creation_datetime': '2019-03-07 22:11:19',
                                                'summary_data_updated_datetime': '2019-03-07 22:11:19'}]
-        mock_provider_statistics.return_value = stats_response
+
         provider_authentication = ProviderAuthentication.objects.create(provider_resource_name='cluster_id_1001')
         provider = Provider.objects.create(name='ocpprovidername',
                                            type='OCP',
@@ -412,19 +410,57 @@ class ProviderManagerTest(IamTestCase):
         provider_uuid = provider.uuid
         manager = ProviderManager(provider_uuid)
 
-        stats = manager.provider_statistics(self.tenant)
+        with patch.object(ProviderManager, 'provider_statistics', return_value=stats_response):
+            self.assertTrue(manager.is_processing_in_progress(self.tenant))
 
-        for key, value in stats.items():
-            key_date_obj = parser.parse(key)
-            value_data = value.pop()
+    def test_provider_is_processing_in_progress_missing_line_processing(self):
+        """Test is_processing_in_progress when line processing not complete."""
+        # Create Provider
+        current_month = datetime.today().date().replace(day=1)
+        stats_response = {}
+        stats_response[str(current_month)] = [{'assembly_id': '1f54e1ec-1dc3-4626-ba96-e5a812279a08',
+                                               'billing_period_start': current_month,
+                                               'files_processed': '1/1',
+                                               'last_process_start_date': '2019-03-03 00:00:00',
+                                               'last_process_complete_date': None,
+                                               'summary_data_creation_datetime': '2019-03-07 22:11:19',
+                                               'summary_data_updated_datetime': '2019-03-07 22:11:19'}]
 
-            self.assertIsNotNone(value_data.get('assembly_id'))
-            self.assertIsNotNone(value_data.get('files_processed'))
-            self.assertEqual(value_data.get('billing_period_start'), key_date_obj.date())
-            self.assertGreater(parser.parse(value_data.get('last_process_start_date')), key_date_obj)
-            self.assertGreater(parser.parse(value_data.get('last_process_complete_date')), key_date_obj)
-            self.assertGreater(parser.parse(value_data.get('summary_data_creation_datetime')), key_date_obj)
-            self.assertGreater(parser.parse(value_data.get('summary_data_updated_datetime')), key_date_obj)
+        provider_authentication = ProviderAuthentication.objects.create(provider_resource_name='cluster_id_1001')
+        provider = Provider.objects.create(name='ocpprovidername',
+                                           type='OCP',
+                                           created_by=self.user,
+                                           customer=self.customer,
+                                           authentication=provider_authentication,)
 
-        import pdb; pdb.set_trace()
-        self.assertTrue(manager.is_processing_in_progress(self.tenant))
+        provider_uuid = provider.uuid
+        manager = ProviderManager(provider_uuid)
+
+        with patch.object(ProviderManager, 'provider_statistics', return_value=stats_response):
+            self.assertTrue(manager.is_processing_in_progress(self.tenant))
+
+    def test_provider_is_processing_in_progress_missing_summary_processing(self):
+        """Test is_processing_in_progress when line processing not complete."""
+        # Create Provider
+        current_month = datetime.today().date().replace(day=1)
+        stats_response = {}
+        stats_response[str(current_month)] = [{'assembly_id': '1f54e1ec-1dc3-4626-ba96-e5a812279a08',
+                                               'billing_period_start': current_month,
+                                               'files_processed': '1/1',
+                                               'last_process_start_date': '2019-03-03 00:00:00',
+                                               'last_process_complete_date': '2019-03-04 00:00:00',
+                                               'summary_data_creation_datetime': '2019-03-07 22:11:19',
+                                               'summary_data_updated_datetime': None}]
+
+        provider_authentication = ProviderAuthentication.objects.create(provider_resource_name='cluster_id_1001')
+        provider = Provider.objects.create(name='ocpprovidername',
+                                           type='OCP',
+                                           created_by=self.user,
+                                           customer=self.customer,
+                                           authentication=provider_authentication,)
+
+        provider_uuid = provider.uuid
+        manager = ProviderManager(provider_uuid)
+
+        with patch.object(ProviderManager, 'provider_statistics', return_value=stats_response):
+            self.assertTrue(manager.is_processing_in_progress(self.tenant))

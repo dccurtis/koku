@@ -74,7 +74,7 @@ class ProviderManager:
         stats = self.provider_statistics(tenant)
 
         current_month = str(datetime.today().date().replace(day=1))
-        month_stats = stats.get(current_month)
+        month_stats = stats.get(current_month, [])
 
         for stat in month_stats:
 
