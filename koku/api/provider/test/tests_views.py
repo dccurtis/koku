@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 """Test the Provider views."""
+from datetime import datetime
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -280,3 +281,56 @@ class ProviderViewTest(IamTestCase):
         client = APIClient()
         response = client.delete(url, **self.headers)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_remove_processing_in_progress(self, ):
+        """Test removing an invalid provider with the non_uuid."""
+        # Create a Provider
+        iam_arn = 'arn:aws:s3:::my_s3_bucket'
+        bucket_name = 'my_s3_bucket'
+        response = self.create_provider(bucket_name, iam_arn)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        provider_uuid = response.data.get('uuid')
+
+        current_month = datetime.today().date().replace(day=1)
+        stats_response = {}
+        stats_response[str(current_month)] = [{'assembly_id': '1f54e1ec-1dc3-4626-ba96-e5a812279a08',
+                                               'billing_period_start': current_month,
+                                               'files_processed': '1/2',
+                                               'last_process_start_date': '2019-03-03 00:00:00',
+                                               'last_process_complete_date': '2019-03-04 00:00:00',
+                                               'summary_data_creation_datetime': '2019-03-07 22:11:19',
+                                               'summary_data_updated_datetime': '2019-03-07 22:11:19'}]
+
+        url = reverse('provider-detail', args=[provider_uuid])
+        with patch.object(ProviderManager, 'provider_statistics', return_value=stats_response):
+            client = APIClient()
+            response = client.delete(url, **self.headers)
+            self.assertEqual(response.status_code, status.HTTP_409_CONFLICT)
+
+    def test_remove_processing_in_progress_force_delete(self, ):
+        """Test removing an invalid provider with the non_uuid."""
+        # Create a Provider
+        iam_arn = 'arn:aws:s3:::my_s3_bucket'
+        bucket_name = 'my_s3_bucket'
+        response = self.create_provider(bucket_name, iam_arn)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        provider_uuid = response.data.get('uuid')
+
+        current_month = datetime.today().date().replace(day=1)
+        stats_response = {}
+        stats_response[str(current_month)] = [{'assembly_id': '1f54e1ec-1dc3-4626-ba96-e5a812279a08',
+                                               'billing_period_start': current_month,
+                                               'files_processed': '1/2',
+                                               'last_process_start_date': '2019-03-03 00:00:00',
+                                               'last_process_complete_date': '2019-03-04 00:00:00',
+                                               'summary_data_creation_datetime': '2019-03-07 22:11:19',
+                                               'summary_data_updated_datetime': '2019-03-07 22:11:19'}]
+
+        url = reverse('provider-detail', args=[provider_uuid])
+        url += '?force=True'
+        with patch.object(ProviderManager, 'provider_statistics', return_value=stats_response):
+            client = APIClient()
+            response = client.delete(url, **self.headers)
+            self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)

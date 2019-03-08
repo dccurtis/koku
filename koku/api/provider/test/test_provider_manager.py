@@ -19,7 +19,7 @@ import json
 import logging
 from datetime import datetime
 from unittest.mock import patch
-from dateutil import relativedelta
+
 from dateutil import parser
 from tenant_schemas.utils import tenant_context
 
@@ -385,7 +385,6 @@ class ProviderManagerTest(IamTestCase):
             self.assertGreater(parser.parse(value_data.get('summary_data_updated_datetime')), key_date_obj)
 
         self.assertFalse(manager.is_processing_in_progress(self.tenant))
-
 
     def test_provider_is_processing_in_progress_missing_file(self):
         """Test is_processing_in_progress when 1/2 files are processed."""

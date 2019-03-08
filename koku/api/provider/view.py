@@ -341,10 +341,10 @@ class ProviderViewSet(mixins.CreateModelMixin,
         get_object_or_404(Provider, uuid=uuid)
         manager = ProviderManager(uuid)
         force_delete = request.query_params.get('force', False)
+        tenant = get_tenant(request.user)
+        if not force_delete and manager.is_processing_in_progress(tenant):
+            raise ProviderUnableDeleteException
         try:
-            tenant = get_tenant(request.user)
-            if not force_delete and manager.is_processing_in_progress(tenant):
-                raise ProviderUnableDeleteException
             manager.remove(request.user)
         except Exception:
             LOG.error('{} failed to remove provider uuid: {}.'.format(request.user, uuid))
