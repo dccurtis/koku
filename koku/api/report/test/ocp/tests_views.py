@@ -47,7 +47,7 @@ class OCPReportViewTest(IamTestCase):
         """Set up the test class."""
         super().setUpClass()
         cls.dh = DateHelper()
-        cls.ten_days_ago = cls.dh.n_days_ago(cls.dh._now, 9)
+        cls.ten_days_ago = cls.dh.n_days_ago(cls.dh._now, 10)
 
     def setUp(self):
         """Set up the customer view tests."""
@@ -536,8 +536,7 @@ class OCPReportViewTest(IamTestCase):
                 .aggregate(
                     total=Sum(
                         F('pod_charge_cpu_core_hours') +  # noqa: W504
-                        F('pod_charge_memory_gigabyte_hours')
-                    )
+                        F('pod_charge_memory_gigabyte_hours'))
                 ).get('total')
             current_total = current_total if current_total is not None else 0
 
@@ -545,14 +544,17 @@ class OCPReportViewTest(IamTestCase):
                 .filter(usage_start__gte=this_month_start)\
                 .annotate(**{'date': TruncDayString('usage_start')})\
                 .values(*['date'])\
-                .annotate(total=Sum(F('pod_charge_cpu_core_hours') + F('pod_charge_memory_gigabyte_hours')))
+                .annotate(total=Sum(
+                            F('pod_charge_cpu_core_hours') +  # noqa: W504
+                            F('pod_charge_memory_gigabyte_hours')))
 
             prev_totals = OCPUsageLineItemDailySummary.objects\
                 .filter(usage_start__gte=last_month_start)\
                 .filter(usage_start__lt=this_month_start)\
                 .annotate(**{'date': TruncDayString('usage_start')})\
                 .values(*['date'])\
-                .annotate(total=Sum(F('pod_charge_cpu_core_hours') + F('pod_charge_memory_gigabyte_hours')))
+                .annotate(total=Sum(F('pod_charge_cpu_core_hours') +  # noqa: W504
+                            F('pod_charge_memory_gigabyte_hours')))
 
         current_totals = {total.get('date'): total.get('total')
                           for total in current_totals}
@@ -778,7 +780,7 @@ class OCPReportViewTest(IamTestCase):
 
     def test_execute_query_with_tag_filter(self):
         """Test that data is filtered by tag key."""
-        handler = OCPTagQueryHandler('', {}, self.tenant)
+        handler = OCPTagQueryHandler({'filter': {'type': 'pod'}}, '?filter[type]=pod', self.tenant)
         tag_keys = handler.get_tag_keys()
         filter_key = tag_keys[0]
 
@@ -820,7 +822,7 @@ class OCPReportViewTest(IamTestCase):
 
     def test_execute_query_with_wildcard_tag_filter(self):
         """Test that data is filtered to include entries with tag key."""
-        handler = OCPTagQueryHandler('', {}, self.tenant)
+        handler = OCPTagQueryHandler({'filter': {'type': 'pod'}}, '?filter[type]=pod', self.tenant)
         tag_keys = handler.get_tag_keys()
         filter_key = tag_keys[0]
 
@@ -854,7 +856,7 @@ class OCPReportViewTest(IamTestCase):
 
     def test_execute_query_with_tag_group_by(self):
         """Test that data is grouped by tag key."""
-        handler = OCPTagQueryHandler('', {}, self.tenant)
+        handler = OCPTagQueryHandler({'filter': {'type': 'pod'}}, '?filter[type]=pod', self.tenant)
         tag_keys = handler.get_tag_keys()
         group_by_key = tag_keys[0]
 
