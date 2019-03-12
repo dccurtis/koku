@@ -43,7 +43,6 @@ class CostUsageReportStatus(models.Model):
     manifest = models.ForeignKey('CostUsageReportManifest', null=True,
                                  on_delete=models.CASCADE)
     report_name = models.CharField(max_length=128, null=False, unique=True)
-    ingest_started_datetime = models.DateTimeField(null=True)
     last_completed_datetime = models.DateTimeField(null=True)
     last_started_datetime = models.DateTimeField(null=True)
     etag = models.CharField(max_length=64, null=True)
