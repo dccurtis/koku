@@ -168,6 +168,9 @@ class FilterSerializer(serializers.Serializer):
         ('day', 'day'),
         ('month', 'month'),
     )
+    INFRASTRUCTURE_CHOICES = (
+        ('aws', 'aws')
+    )
 
     resolution = serializers.ChoiceField(choices=RESOLUTION_CHOICES,
                                          required=False)
@@ -187,13 +190,15 @@ class FilterSerializer(serializers.Serializer):
                             required=False)
     node = StringOrListField(child=serializers.CharField(),
                              required=False)
+    infrastructures = serializers.ChoiceField(choices=INFRASTRUCTURE_CHOICES,
+                                               required=False)
 
     def __init__(self, *args, **kwargs):
         """Initialize the FilterSerializer."""
         tag_keys = kwargs.pop('tag_keys', None)
 
         super().__init__(*args, **kwargs)
-
+        # import pdb; pdb.set_trace()
         if tag_keys is not None:
             tag_keys = {key: StringOrListField(child=serializers.CharField(),
                                                required=False)
@@ -256,7 +261,7 @@ class OCPQueryParamSerializer(serializers.Serializer):
         # Grab tag keys to pass to filter serializer
         self.tag_keys = kwargs.pop('tag_keys', None)
         super().__init__(*args, **kwargs)
-
+        # import pdb; pdb.set_trace()
         tag_fields = {
             'filter': FilterSerializer(required=False, tag_keys=self.tag_keys),
             'group_by': GroupBySerializer(required=False, tag_keys=self.tag_keys)
