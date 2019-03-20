@@ -183,3 +183,7 @@ class AWSProvider(ProviderInterface):
     def infrastructure_type_meat(self, provider_uuid, tenant):
         """Return infrastructure type."""
         return None
+
+    def infrastructure_keys_meat(self, tenant, infrastructure_type):
+        """Return list of cluster_ids running on AWS."""
+        return []

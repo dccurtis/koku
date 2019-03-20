@@ -79,3 +79,20 @@ class ProviderInterface(ABC):
 
         """
         pass
+
+    @abstractmethod
+    def infrastructure_keys_meat(self, schema_name):
+        """
+        Return a list of infrastructure resource keys.
+
+        Args:
+            None
+
+        Returns:
+            None
+
+        Raises:
+            ValidationError: Error string
+
+        """
+        pass

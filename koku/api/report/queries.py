@@ -955,6 +955,7 @@ class ReportQueryHandler(QueryHandler):
             (QueryFilterCollection): populated collection of query filters
         """
         # define filter parameters using API query params.
+        import pdb; pdb.set_trace()
         fields = self._mapper._provider_map.get('filters')
         for q_param, filt in fields.items():
             group_by = self.get_query_param_data('group_by', q_param, list())

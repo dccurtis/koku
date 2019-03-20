@@ -129,3 +129,22 @@ class ProviderAccessor:
             raise ProviderAccessorError(str(error))
 
         return infrastructure_type if infrastructure_type else 'Unknown'
+
+    def infrastructure_keys(self, schema_name, infrastructure_type):
+        """
+        Return the name of the infrastructure that the provider is running on.
+
+        Args:
+            None
+
+        Returns:
+            (List) : List of resource identifiers 
+                     example: ['ocp-on-aws-cluster-1', 'ocp-on-aws-cluster-2']
+
+        """
+        keys = []
+        try:
+            keys = self.service.infrastructure_keys_meat(schema_name, infrastructure_type)
+        except Exception as error:
+            raise ProviderAccessorError(str(error))
+        return keys

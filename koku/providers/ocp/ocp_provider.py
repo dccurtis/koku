@@ -94,3 +94,18 @@ class OCPProvider(ProviderInterface):
             return Provider.PROVIDER_AWS
 
         return None
+
+    def _clusters_on_aws(tenant):
+        """Return a list of OCP clusters running on AWS."""
+        clusters = []
+        with tenant_context(tenant):
+            objects = OCPAWSUsageLineItemDaily.objects.all()
+            clusters = list(objects.values('cluster_id').distinct())
+        return clusters
+
+    def infrastructure_keys_meat(self, tenant, infrastructure_type):
+        """Return list of cluster_ids running on specified infrastructure."""
+        clusters = []
+        if infrastructure_type == Provider.PROVIDER_AWS:
+            clusters = self._clusters_on_aws(tenant)
+        return clusters
