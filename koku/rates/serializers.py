@@ -189,6 +189,7 @@ class RateSerializer(serializers.ModelSerializer):
         if any(data.get(rate_key) is not None for rate_key in rate_keys):
             tiered_rate = data.get('tiered_rate')
             if tiered_rate is not None:
+                import pdb; pdb.set_trace()
                 RateSerializer._validate_continuouse_tiers(tiered_rate)
             return data
         else:
