@@ -69,7 +69,7 @@ class AWSCostEntry(models.Model):
     interval_start = models.DateTimeField(null=False)
     interval_end = models.DateTimeField(null=False)
 
-    bill = models.ForeignKey('AWSCostEntryBill', on_delete=models.PROTECT)
+    bill = models.ForeignKey('AWSCostEntryBill', on_delete=models.CASCADE)
 
 
 class AWSCostEntryLineItem(models.Model):
@@ -84,7 +84,7 @@ class AWSCostEntryLineItem(models.Model):
     cost_entry = models.ForeignKey('AWSCostEntry',
                                    on_delete=models.PROTECT)
     cost_entry_bill = models.ForeignKey('AWSCostEntryBill',
-                                        on_delete=models.PROTECT)
+                                        on_delete=models.CASCADE)
     cost_entry_product = models.ForeignKey('AWSCostEntryProduct',
                                            on_delete=models.PROTECT, null=True)
     cost_entry_pricing = models.ForeignKey('AWSCostEntryPricing',
@@ -186,7 +186,7 @@ class AWSCostEntryLineItemDaily(models.Model):
     id = models.BigAutoField(primary_key=True)
 
     cost_entry_bill = models.ForeignKey('AWSCostEntryBill',
-                                        on_delete=models.PROTECT,
+                                        on_delete=models.CASCADE,
                                         null=True)
     cost_entry_product = models.ForeignKey('AWSCostEntryProduct',
                                            on_delete=models.PROTECT, null=True)
@@ -275,7 +275,7 @@ class AWSCostEntryLineItemDailySummary(models.Model):
     id = models.BigAutoField(primary_key=True)
 
     cost_entry_bill = models.ForeignKey('AWSCostEntryBill',
-                                        on_delete=models.PROTECT,
+                                        on_delete=models.CASCADE,
                                         null=True)
 
     # The following fields are used for grouping
