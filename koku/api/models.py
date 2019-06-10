@@ -17,8 +17,8 @@
 """API models for import organization."""
 # flake8: noqa
 # pylint: disable=unused-import
-from api.status.models import Status
-from api.iam.models import Customer, Tenant, User, UserPreference
-from api.provider.models import (Provider,
-                                 ProviderAuthentication,
-                                 ProviderBillingSource)
+from kokudb.status.models import Status
+from kokudb.iam.models import Customer, Tenant, User, UserPreference
+from kokudb.provider.models import (Provider,
+                                    ProviderAuthentication,
+                                    ProviderBillingSource)

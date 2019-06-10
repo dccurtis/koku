@@ -23,7 +23,7 @@ import platform
 import subprocess
 import sys
 
-from api import API_VERSION
+from kokudb import API_VERSION
 
 logger = logging.getLogger(__name__)  # pylint: disable=invalid-name
 

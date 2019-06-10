@@ -1,0 +1,8 @@
+include LICENSE
+include README.rst
+recursive-include kokudb/iam *
+recursive-include kokudb/metrics *
+recursive-include kokudb/migrations *
+recursive-include kokudb/provider *
+recursive-include kokudb/status *
+recursive-include docs *

@@ -84,11 +84,13 @@ INSTALLED_APPS = [
     'reporting',
     'reporting_common',
     'rates',
+    'kokudb',
 ]
 
 SHARED_APPS = (
     'tenant_schemas',
     'api',
+    'kokudb',
     'reporting_common',
     'django.contrib.contenttypes',
     'django.contrib.auth',

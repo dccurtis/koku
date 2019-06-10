@@ -7,4 +7,6 @@ RUN pip install pipenv
 RUN pip install pipenv-to-requirements
 RUN pipenv run pipenv_to_requirements -f
 RUN pip install -r requirements.txt
+ADD django-kokufoundation /opt/app-root/src/django-kokufoundation
+RUN pip install django-kokufoundation/dist/django-kokufoundation-0.1.tar.gz
 USER root
