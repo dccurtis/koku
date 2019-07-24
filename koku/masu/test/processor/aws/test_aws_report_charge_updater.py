@@ -16,7 +16,11 @@
 #
 
 """Test the AWSReportDBAccessor utility object."""
+<<<<<<< HEAD
 import psycopg2
+=======
+from tenant_schemas.utils import schema_context
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
 
 from masu.database import AWS_CUR_TABLE_MAP
 from masu.database.aws_report_db_accessor import AWSReportDBAccessor
@@ -26,6 +30,7 @@ from masu.database.provider_db_accessor import ProviderDBAccessor
 from masu.external.date_accessor import DateAccessor
 from masu.processor.aws.aws_report_charge_updater import (
     AWSReportChargeUpdater,
+<<<<<<< HEAD
     AWSReportChargeUpdaterError,
 )
 from tests import MasuTestCase
@@ -33,6 +38,14 @@ from tests.database.helpers import ReportObjectCreator
 
 
 class AWSReportChargeUpdaterTest(MasuTestCase):
+=======
+)
+from masu.test import MasuTransactionTestCase
+from masu.test.database.helpers import ReportObjectCreator
+
+
+class AWSReportChargeUpdaterTest(MasuTransactionTestCase):
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
     """Test Cases for the AWSReportChargeUpdater object."""
 
     @classmethod
@@ -45,7 +58,10 @@ class AWSReportChargeUpdaterTest(MasuTestCase):
         cls.accessor = AWSReportDBAccessor('acct10001', cls.column_map)
 
         cls.report_schema = cls.accessor.report_schema
+<<<<<<< HEAD
         cls.session = cls.accessor._session
+=======
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
 
         cls.all_tables = list(AWS_CUR_TABLE_MAP.values())
 
@@ -67,17 +83,23 @@ class AWSReportChargeUpdaterTest(MasuTestCase):
     def tearDownClass(cls):
         """Tear down the test class."""
         cls.manifest_accessor.close_session()
+<<<<<<< HEAD
         cls.accessor.close_connections()
         cls.accessor.close_session()
+=======
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
         super().tearDownClass()
 
     def setUp(self):
         """Set up each test."""
         super().setUp()
+<<<<<<< HEAD
         if self.accessor._conn.closed:
             self.accessor._conn = self.accessor._db.connect()
         if self.accessor._pg2_conn.closed:
             self.accessor._pg2_conn = self.accessor._get_psycopg2_connection()
+=======
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
         if self.accessor._cursor.closed:
             self.accessor._cursor = self.accessor._get_psycopg2_cursor()
 
@@ -89,7 +111,11 @@ class AWSReportChargeUpdaterTest(MasuTestCase):
             provider_uuid=self.aws_test_provider_uuid
         )
         self.updater = AWSReportChargeUpdater(
+<<<<<<< HEAD
             schema=self.test_schema,
+=======
+            schema=self.schema,
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
             provider_uuid=self.aws_test_provider_uuid,
             provider_id=provider_id,
         )
@@ -104,7 +130,11 @@ class AWSReportChargeUpdaterTest(MasuTestCase):
         )
 
         self.manifest = self.manifest_accessor.add(**self.manifest_dict)
+<<<<<<< HEAD
         self.manifest_accessor.commit()
+=======
+        #self.manifest_accessor.commit()
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
 
         with ProviderDBAccessor(self.aws_test_provider_uuid) as provider_accessor:
             self.provider = provider_accessor.get_provider()
@@ -114,6 +144,7 @@ class AWSReportChargeUpdaterTest(MasuTestCase):
         super().tearDown()
         # self.session.rollback()
 
+<<<<<<< HEAD
         for table_name in self.all_tables:
             tables = self.accessor._get_db_obj_query(table_name).all()
             for table in tables:
@@ -124,6 +155,18 @@ class AWSReportChargeUpdaterTest(MasuTestCase):
         for manifest in manifests:
             self.manifest_accessor.delete(manifest)
         self.manifest_accessor.commit()
+=======
+        #for table_name in self.all_tables:
+            #tables = self.accessor._get_db_obj_query(table_name).all()
+            #for table in tables:
+            #    self.accessor._session.delete(table)
+        #self.accessor.commit()
+
+        #manifests = self.manifest_accessor._get_db_obj_query().all()
+        #for manifest in manifests:
+        #    self.manifest_accessor.delete(manifest)
+        #self.manifest_accessor.commit()
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
 
     def test_update_summary_charge_info(self):
         """Test to verify AWS derived cost summary is calculated."""

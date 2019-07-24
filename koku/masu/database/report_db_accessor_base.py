@@ -247,6 +247,18 @@ class ReportDBAccessorBase(KokuDBAccess):
 
         return table(**data)
 
+    def _format_data_for_db_insertion(self, data):
+        formatted_data = []
+        for value in data.values():
+            if value is None:
+                formatted_data.append('NULL')
+            else:
+                formatted_data.append("'{}'".format(str(value)))
+            #else:
+            #    formatted_data.append(value)
+
+        return ', '.join(formatted_data)
+
     def insert_on_conflict_do_nothing(self,
                                       table_name,
                                       data,
@@ -267,8 +279,12 @@ class ReportDBAccessorBase(KokuDBAccess):
         """
         data = self.clean_data(data, table_name)
         columns_formatted = ', '.join(str(value) for value in data.keys())
-        data_formatted = ', '.join("'{}'".format(str(value)) for value in data.values())
-        insert_sql = f"""INSERT INTO {table_name}({columns_formatted}) VALUES({data_formatted})"""
+        data_formatted = self._format_data_for_db_insertion(data)
+
+        if columns_formatted:
+            insert_sql = f"""INSERT INTO {table_name}({columns_formatted}) VALUES({data_formatted})"""
+        else:
+            insert_sql = f"""INSERT INTO {table_name} VALUES({data_formatted})"""
 
         if conflict_columns:
             conflict_columns_formatted = ', '.join(conflict_columns)

@@ -42,8 +42,13 @@ class OCPRateDBAccessorTest(MasuTestCase):
         cls.column_map = cls.common_accessor.column_map
         cls.accessor = OCPRateDBAccessor(
             schema='acct10001',
+<<<<<<< HEAD
             provider_uuid=cls.provider_uuid,
             column_map=cls.column_map
+=======
+            provider_uuid='3c6e687e-1a09-4a05-970c-2ccf44b0952e',
+            column_map=cls.column_map,
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
         )
         cls.report_schema = cls.accessor.report_schema
         cls.creator = ReportObjectCreator(
@@ -59,6 +64,7 @@ class OCPRateDBAccessorTest(MasuTestCase):
 
         reporting_period = self.creator.create_ocp_report_period()
         report = self.creator.create_ocp_report(reporting_period)
+<<<<<<< HEAD
         self.creator.create_ocp_usage_line_item(
             reporting_period,
             report
@@ -81,6 +87,46 @@ class OCPRateDBAccessorTest(MasuTestCase):
         self.creator.create_cost_model(self.provider_uuid, 'OCP', rates)
         # Reset the rate map in the accessor
         self.accessor.rates = self.accessor._make_rate_by_metric_map()
+=======
+        self.creator.create_ocp_usage_line_item(reporting_period, report)
+        self.cpu_usage_rate = {
+            'metric': 'cpu_core_usage_per_hour',
+            'provider_uuid': '3c6e687e-1a09-4a05-970c-2ccf44b0952e',
+            'rates': {'tiered_rate': [{'value': 1.5, 'unit': 'USD'}]},
+        }
+        self.mem_usage_rate = {
+            'metric': 'memory_gb_usage_per_hour',
+            'provider_uuid': '3c6e687e-1a09-4a05-970c-2ccf44b0952e',
+            'rates': {'tiered_rate': [{'value': 2.5, 'unit': 'USD'}]},
+        }
+        self.cpu_request_rate = {
+            'metric': 'cpu_core_request_per_hour',
+            'provider_uuid': '3c6e687e-1a09-4a05-970c-2ccf44b0952e',
+            'rates': {'tiered_rate': [{'value': 3.5, 'unit': 'USD'}]},
+        }
+        self.mem_request_rate = {
+            'metric': 'memory_gb_request_per_hour',
+            'provider_uuid': '3c6e687e-1a09-4a05-970c-2ccf44b0952e',
+            'rates': {'tiered_rate': [{'value': 4.5, 'unit': 'USD'}]},
+        }
+        self.storage_usage_rate = {
+            'metric': 'storage_gb_usage_per_month',
+            'provider_uuid': '3c6e687e-1a09-4a05-970c-2ccf44b0952e',
+            'rates': {'tiered_rate': [{'value': 5.5, 'unit': 'USD'}]},
+        }
+        self.storage_request_rate = {
+            'metric': 'storage_gb_request_per_month',
+            'provider_uuid': '3c6e687e-1a09-4a05-970c-2ccf44b0952e',
+            'rates': {'tiered_rate': [{'value': 6.5, 'unit': 'USD'}]},
+        }
+
+        self.creator.create_rate(**self.cpu_usage_rate)
+        self.creator.create_rate(**self.mem_usage_rate)
+        self.creator.create_rate(**self.cpu_request_rate)
+        self.creator.create_rate(**self.mem_request_rate)
+        self.creator.create_rate(**self.storage_usage_rate)
+        self.creator.create_rate(**self.storage_request_rate)
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
 
     def test_initializer(self):
         """Test initializer."""

@@ -21,17 +21,30 @@ import datetime
 from dateutil import relativedelta
 
 from masu.database import OCP_REPORT_TABLE_MAP
+<<<<<<< HEAD
+=======
+from masu.database.aws_report_db_accessor import AWSReportDBAccessor
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
 from masu.database.ocp_report_db_accessor import OCPReportDBAccessor
 from masu.processor.ocp.ocp_report_db_cleaner import (
     OCPReportDBCleaner,
     OCPReportDBCleanerError,
 )
 from masu.database.reporting_common_db_accessor import ReportingCommonDBAccessor
+<<<<<<< HEAD
 from tests import MasuTestCase
 from tests.database.helpers import ReportObjectCreator
 
 
 class OCPReportDBCleanerTest(MasuTestCase):
+=======
+from masu.external.date_accessor import DateAccessor
+from masu.test import MasuTransactionTestCase
+from masu.test.database.helpers import ReportObjectCreator
+
+
+class OCPReportDBCleanerTest(MasuTransactionTestCase):
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
     """Test Cases for the OCPReportDBCleaner object."""
 
     @classmethod
@@ -48,6 +61,15 @@ class OCPReportDBCleanerTest(MasuTestCase):
         )
         cls.all_tables = list(OCP_REPORT_TABLE_MAP.values())
 
+<<<<<<< HEAD
+=======
+        cls.aws_accessor = AWSReportDBAccessor(
+            schema='acct10001', column_map=cls.column_map
+        )
+        cls.aws_creator = ReportObjectCreator(
+            cls.aws_accessor, cls.column_map, cls.report_schema.column_types
+        )
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
     @classmethod
     def tearDownClass(cls):
         """Close the DB session."""
@@ -55,6 +77,7 @@ class OCPReportDBCleanerTest(MasuTestCase):
         cls.accessor.close_session()
 
     def setUp(self):
+<<<<<<< HEAD
         """"Set up a test with database objects."""
         reporting_period = self.creator.create_ocp_report_period()
         report = self.creator.create_ocp_report(reporting_period)
@@ -70,12 +93,31 @@ class OCPReportDBCleanerTest(MasuTestCase):
             for table in tables:
                 self.accessor._session.delete(table)
         self.accessor.commit()
+=======
+        super().setUp()
+        """"Set up a test with database objects."""
+        self.reporting_period = self.creator.create_ocp_report_period()
+        self.report = self.creator.create_ocp_report(self.reporting_period)
+        self.ocp_usage_line_item = self.creator.create_ocp_usage_line_item(self.reporting_period, self.report)
+        self.ocp_usage_storage_item = self.creator.create_ocp_storage_line_item(self.reporting_period, self.report)
+
+    def tearDown(self):
+        super().tearDown()
+
+        self.ocp_usage_storage_item.delete()
+        self.ocp_usage_line_item.delete()
+        self.report.delete()
+        self.reporting_period.delete()
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
 
     def test_initializer(self):
         """Test initializer."""
         self.assertIsNotNone(self.report_schema)
+<<<<<<< HEAD
         self.assertIsNotNone(self.accessor._session)
         self.assertIsNotNone(self.accessor._conn)
+=======
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
         self.assertIsNotNone(self.accessor._cursor)
 
     def test_purge_expired_report_data_on_date(self):
@@ -86,7 +128,10 @@ class OCPReportDBCleanerTest(MasuTestCase):
         storage_line_item_table_name = OCP_REPORT_TABLE_MAP['storage_line_item']
 
         cleaner = OCPReportDBCleaner('acct10001')
+<<<<<<< HEAD
 
+=======
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
         # Verify that data is cleared for a cutoff date == billing_period_start
         first_period = self.accessor._get_db_obj_query(report_period_table_name).first()
         cutoff_date = first_period.report_period_start

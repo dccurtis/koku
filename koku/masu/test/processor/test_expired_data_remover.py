@@ -22,12 +22,19 @@ from datetime import datetime
 import pytz
 
 from masu.external.date_accessor import DateAccessor
+<<<<<<< HEAD
 from masu.processor.aws.aws_report_db_cleaner import AWSReportDBCleaner
+=======
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
 from masu.processor.expired_data_remover import (
     ExpiredDataRemover,
     ExpiredDataRemoverError,
 )
+<<<<<<< HEAD
 from tests import MasuTestCase
+=======
+from masu.test import MasuTestCase
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
 
 
 class ExpiredDataRemoverTest(MasuTestCase):

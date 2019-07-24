@@ -107,6 +107,11 @@ class AWSReportSummaryUpdater:
                 bill.summary_data_updated_datetime = \
                     self._date_accessor.today_with_timezone('UTC')
 
+<<<<<<< HEAD
+=======
+                bill.save()
+
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
             accessor.commit()
         return start_date, end_date
 
@@ -120,8 +125,12 @@ class AWSReportSummaryUpdater:
                 bills = accessor.get_cost_entry_bills_query_by_provider(
                     self._provider.id
                 )
+<<<<<<< HEAD
                 bills = bills.filter_by(billing_period_start=bill_date).all()
 
+=======
+                bills = bills.filter(billing_period_start=bill_date).all()
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
                 do_month_update = self._determine_if_full_summary_update_needed(
                     bills[0]
                 )

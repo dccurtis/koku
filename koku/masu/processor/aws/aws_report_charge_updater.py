@@ -64,4 +64,8 @@ class AWSReportChargeUpdater:
             bills = accessor.bills_for_provider_id(self._provider_id, start_date)
             for bill in bills:
                 bill.derived_cost_datetime = DateAccessor().today_with_timezone('UTC')
+<<<<<<< HEAD
+=======
+                bill.save()
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
             accessor.commit()

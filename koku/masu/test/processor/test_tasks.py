@@ -26,7 +26,10 @@ from unittest.mock import call, patch, Mock, ANY
 
 import faker
 from dateutil import relativedelta
+<<<<<<< HEAD
 from sqlalchemy.sql import func
+=======
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
 
 from masu.config import Config
 from masu.database import AWS_CUR_TABLE_MAP, OCP_REPORT_TABLE_MAP
@@ -49,9 +52,15 @@ from masu.processor.tasks import (
     update_all_summary_tables,
     update_summary_tables,
 )
+<<<<<<< HEAD
 from tests import MasuTestCase
 from tests.database.helpers import ReportObjectCreator
 from tests.external.downloader.aws import fake_arn
+=======
+from masu.test import MasuTestCase
+from masu.test.database.helpers import ReportObjectCreator
+from masu.test.external.downloader.aws import fake_arn
+>>>>>>> 57eecdd05376e89d19767b0219ee9e5c22a8faba
 
 
 class FakeDownloader(Mock):
