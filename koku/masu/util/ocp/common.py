@@ -171,4 +171,5 @@ def poll_ingest_override_for_provider(provider_uuid):
     """
     cluster_id = get_cluster_id_from_provider(provider_uuid)
     local_ingest_path = '{}/{}'.format(Config.INSIGHTS_LOCAL_REPORT_DIR, str(cluster_id))
+    LOG.info('LOCAL INGEST PATH: ', str(local_ingest_path))
     return os.path.exists(local_ingest_path)

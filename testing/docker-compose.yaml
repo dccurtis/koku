@@ -1,0 +1,19 @@
+version: '3'
+
+services:
+  iqe-tests:
+      container_name: iqe_tests
+      build:
+          context: .
+          dockerfile: Dockerfile
+      working_dir: /testing
+      entrypoint:
+        - /testing/run_tests.sh
+      environment:
+        - DATABASE_SERVICE_NAME=POSTGRES_SQL
+      privileged: true
+
+networks:
+  default:
+    external:
+      name: koku-network

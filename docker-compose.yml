@@ -160,17 +160,19 @@ services:
         - ENABLE_S3_ARCHIVING=False
         - S3_BUCKET_NAME=koku-bucket
         - S3_BUCKET_PATH=data_archive
+        - INSIGHTS_LOCAL_REPORT_DIR=${INSIGHTS_LOCAL_REPORT_DIR-/test/insights_local}
       privileged: true
       volumes:
         - '.:/koku'
-        # - '~/azure_local:/tmp/local_container'
-        # - '~/aws_local:/tmp/local_bucket'
-        # - '~/aws_local_0:/tmp/local_bucket_0'
-        # - '~/aws_local_1:/tmp/local_bucket_1'
-        # - '~/aws_local_2:/tmp/local_bucket_2'
-        # - '~/aws_local_3:/tmp/local_bucket_3'
-        # - '~/aws_local_4:/tmp/local_bucket_4'
-        # - '~/insights_local:/var/tmp/insights_local'
+        - test-volume:/test
+        - '~/azure_local:/tmp/local_container'
+        - '~/aws_local:/tmp/local_bucket'
+        - '~/aws_local_0:/tmp/local_bucket_0'
+        - '~/aws_local_1:/tmp/local_bucket_1'
+        - '~/aws_local_2:/tmp/local_bucket_2'
+        - '~/aws_local_3:/tmp/local_bucket_3'
+        - '~/aws_local_4:/tmp/local_bucket_4'
+        - '~/insights_local:/var/tmp/insights_local'
       links:
           - koku-rabbit
       depends_on:
@@ -210,6 +212,8 @@ services:
           - "9988:9999"
       volumes:
         - '.:/koku'
+        - test-volume:/test
+
       links:
         - db
         - koku-rabbit
@@ -285,3 +289,26 @@ services:
           - koku-rabbit
       depends_on:
           - koku-rabbit
+
+  iqe-tests:
+      container_name: iqe_tests
+      build:
+          context: ./testing
+          dockerfile: Dockerfile
+      working_dir: /testing/
+      entrypoint:
+        - /testing/run_tests.sh
+      environment:
+        - DATABASE_SERVICE_NAME=POSTGRES_SQL
+      privileged: true
+      volumes:
+        - './testing:/testing'
+        - test-volume:/test
+
+volumes:
+  test-volume:
+
+networks:
+  default:
+    external:
+      name: koku-network
