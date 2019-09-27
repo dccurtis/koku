@@ -7,8 +7,11 @@ CREATE TEMPORARY TABLE reporting_azurecostentrylineitem_daily_summary_{uuid} AS 
                 p.resource_location AS resource_location, -- region
                 p.service_name AS service_name, -- service
                 p.additional_info->>'ServiceType' as instance_type, -- VM type
-                (SELECT sum(usage_quantity)*cast(a[1] as integer) as usage_quantity FROM regexp_split_to_array(m.unit_of_measure, '\s') AS a),
-                (SELECT a[2] as unit_of_measure FROM regexp_split_to_array(m.unit_of_measure, '\s') AS a),
+                (SELECT CASE WHEN m.unit_of_measure is NULL THEN sum(usage_quantity)
+                    ELSE sum(usage_quantity)*a[1]::integer END as usage_quantity
+                    FROM regexp_split_to_array(m.unit_of_measure, '\s') AS a),
+                (SELECT a[2] as unit_of_measure
+                    FROM regexp_split_to_array(m.unit_of_measure, '\s') AS a),
                 sum(pretax_cost) AS pretax_cost,
                 offer_id,
                 cost_entry_product_id,
