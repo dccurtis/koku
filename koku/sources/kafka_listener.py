@@ -23,7 +23,7 @@ import threading
 import time
 
 from aiokafka import AIOKafkaConsumer
-from django.db.models.signals import post_save, pre_save
+from django.db.models.signals import post_save
 from django.dispatch import receiver
 from kafka.errors import KafkaError
 from sources import storage
@@ -70,9 +70,11 @@ def _extract_from_header(headers, header_type):
 def _collect_pending_items():
     """Gather all sources to create or delete."""
     create_events = storage.load_providers_to_create()
+    update_events = storage.load_providers_to_update()
     destroy_events = storage.load_providers_to_delete()
-    pending_events = create_events + destroy_events
-    pending_events.sort(key=lambda item: item.get('offset'))
+    pending_events = create_events + update_events + destroy_events
+    # pending_events.sort(key=lambda item: item.get('offset'))
+    print(f'PENDING EVENTS: {str(pending_events)}')
     return pending_events
 
 
@@ -95,17 +97,15 @@ def load_process_queue():
         PROCESS_QUEUE.put_nowait(event)
 
 
-@receiver(pre_save, sender=Sources)
-def storage_callback_pre_save(sender, instance, **kwargs):
-    """Load Sources ready for Koku Synchronization when Sources table is updated."""
-    process_event = storage.screen_and_build_provider_sync_update_event(instance)
-    # if process_event:
-        # PROCESS_QUEUE.put_nowait(process_event)
-
-
 @receiver(post_save, sender=Sources)
 def storage_callback(sender, instance, **kwargs):
     """Load Sources ready for Koku Synchronization when Sources table is updated."""
+    update_fields = kwargs.get('update_fields', ())
+    if update_fields:
+        if 'pending_update' in update_fields:
+            if instance.koku_uuid and instance.pending_update:
+                PROCESS_QUEUE.put_nowait({'operation': 'update', 'provider': instance})
+
     process_event = storage.screen_and_build_provider_sync_create_event(instance)
     if process_event:
         PROCESS_QUEUE.put_nowait(process_event)
@@ -312,7 +312,7 @@ async def process_messages(msg_pending_queue, in_progress_queue):  # pragma: no 
             await storage.enqueue_source_delete(in_progress_queue, msg_data.get('source_id'))
 
         if msg_data.get('event_type') in (KAFKA_SOURCE_UPDATE, KAFKA_AUTHENTICATION_UPDATE):
-            await storage.enqueue_source_update(in_progress_queue, msg_data.get('source_id'))
+            storage.enqueue_source_update(msg_data.get('source_id'))
 
 
 async def listen_for_messages(consumer, application_source_id, msg_pending_queue):  # pragma: no cover
@@ -380,6 +380,7 @@ def execute_koku_provider_op(msg):
         elif operation == 'update':
             koku_details = koku_client.update_provider(provider.name, provider.source_type, provider.authentication,
                                                        provider.billing_source)
+            storage.clear_update_flag(provider.source_id)
             LOG.info(f'Koku Provider UUID {koku_details.get("uuid")} with Source ID {str(provider.source_id)} updated.')
 
     except KokuHTTPClientError as koku_error:

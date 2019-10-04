@@ -106,6 +106,26 @@ def load_providers_to_create():
     return providers_to_create
 
 
+def load_providers_to_update():
+    """
+    Build a list of Sources have pending Koku Provider updates.
+
+    Args:
+        None
+
+    Returns:
+        [Dict] - List of events that can be processed by the synchronize_sources method.
+
+    """
+    providers_to_update = []
+    providers = Sources.objects.filter(pending_update=True).all()
+    for provider in providers:
+        if provider.koku_uuid:
+            providers_to_update.append({'operation': 'update', 'provider': provider})
+
+    return providers_to_update
+
+
 def load_providers_to_delete():
     """
     Build a list of Sources that need to be deleted from the Koku provider database.
@@ -153,12 +173,11 @@ async def enqueue_source_delete(queue, source_id):
         LOG.error('Unable to enqueue source delete.  %s not found.', str(source_id))
 
 
-async def enqueue_source_update(queue, source_id):
+def enqueue_source_update(source_id):
     """
     Queues a source update event to be processed by the synchronize_sources method.
 
     Args:
-        queue (Asyncio Queue) - process_queue containing all pending Souces-koku events.
         source_id (Integer) - Platform-Sources identifier.
 
     Returns:
@@ -168,7 +187,28 @@ async def enqueue_source_update(queue, source_id):
     try:
         source = Sources.objects.get(source_id=source_id)
         if source.koku_uuid:
-            await queue.put({'operation': 'update', 'provider': source})
+            source.pending_update = True
+            source.save(update_fields=['pending_update'])
+    except Sources.DoesNotExist:
+        LOG.error('Unable to enqueue source delete.  %s not found.', str(source_id))
+
+
+def clear_update_flag(source_id):
+    """
+    Clears pending update flag after successfully updating Koku provider.
+
+    Args:
+        source_id (Integer) - Platform-Sources identifier.
+
+    Returns:
+        None
+
+    """
+    try:
+        source = Sources.objects.get(source_id=source_id)
+        if source.koku_uuid:
+            source.pending_update = False
+            source.save()
     except Sources.DoesNotExist:
         LOG.error('Unable to enqueue source delete.  %s not found.', str(source_id))
 
@@ -302,7 +342,8 @@ def add_subscription_id_to_credentials(source_id, subscription_id):
         auth_dict = query.authentication
         auth_dict['credentials']['subscription_id'] = subscription_id
         query.authentication = auth_dict
-        query.save()
+        query.pending_update = True
+        query.save(update_field=['authentication', 'pending_update'])
     except Sources.DoesNotExist:
         raise SourcesStorageError('Source does not exist')
 
@@ -340,7 +381,8 @@ def add_provider_billing_source(source_id, billing_source):
             raise SourcesStorageError('Source is not AWS nor AZURE.')
         _validate_billing_source(query.source_type, billing_source)
         query.billing_source = billing_source
-        query.save()
+        query.pending_update = True
+        query.save(update_fields=['billing_source', 'pending_update'])
     except Sources.DoesNotExist:
         raise SourcesStorageError('Source does not exist')
 

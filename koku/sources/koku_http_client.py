@@ -144,7 +144,7 @@ class KokuHTTPClient:
         except RequestException as conn_err:
             raise KokuHTTPClientError('Failed to create provider. Connection Error: ', str(conn_err))
         if r.status_code != 201:
-            raise KokuHTTPClientNonRecoverableError('Unable to create provider. Error: ', str(r.json()))
+            raise KokuHTTPClientError('Unable to create provider. Error: ', str(r.json()))
         return r.json()
 
     def destroy_provider(self, provider_uuid):
