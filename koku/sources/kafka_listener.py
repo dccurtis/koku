@@ -41,6 +41,8 @@ PROCESS_QUEUE = asyncio.Queue(loop=EVENT_LOOP)
 KAFKA_APPLICATION_CREATE = 'Application.create'
 KAFKA_APPLICATION_DESTROY = 'Application.destroy'
 KAFKA_AUTHENTICATION_CREATE = 'Authentication.create'
+KAFKA_AUTHENTICATION_UPDATE = 'Authentication.update'
+KAFKA_SOURCE_UPDATE = 'Source.update'
 KAFKA_SOURCE_DESTROY = 'Source.destroy'
 KAFKA_HDR_RH_IDENTITY = 'x-rh-identity'
 KAFKA_HDR_EVENT_TYPE = 'event_type'
@@ -127,13 +129,13 @@ def get_sources_msg_data(msg, app_type_id):
                     msg_data['offset'] = msg.offset
                     msg_data['source_id'] = int(value.get('source_id'))
                     msg_data['auth_header'] = _extract_from_header(msg.headers, KAFKA_HDR_RH_IDENTITY)
-            elif event_type in (KAFKA_AUTHENTICATION_CREATE, ):
+            elif event_type in (KAFKA_AUTHENTICATION_CREATE, KAFKA_AUTHENTICATION_UPDATE):
                 LOG.debug('Authentication Message: %s', str(msg))
                 if value.get('resource_type') == 'Endpoint':
                     msg_data['event_type'] = event_type
                     msg_data['resource_id'] = int(value.get('resource_id'))
                     msg_data['auth_header'] = _extract_from_header(msg.headers, KAFKA_HDR_RH_IDENTITY)
-            elif event_type in (KAFKA_SOURCE_DESTROY, ):
+            elif event_type in (KAFKA_SOURCE_DESTROY, KAFKA_SOURCE_UPDATE):
                 LOG.debug('Source Message: %s', str(msg))
                 msg_data['event_type'] = event_type
                 msg_data['offset'] = msg.offset
@@ -284,7 +286,7 @@ async def process_messages(msg_pending_queue, in_progress_queue):  # pragma: no 
         msg_data = await msg_pending_queue.get()
 
         LOG.info(f'Processing Event: {str(msg_data)}')
-        if msg_data.get('event_type') == KAFKA_APPLICATION_CREATE:
+        if msg_data.get('event_type') in (KAFKA_APPLICATION_CREATE, KAFKA_SOURCE_UPDATE):
             storage.create_provider_event(msg_data.get('source_id'),
                                           msg_data.get('auth_header'),
                                           msg_data.get('offset'))
@@ -292,13 +294,17 @@ async def process_messages(msg_pending_queue, in_progress_queue):  # pragma: no 
                 await EVENT_LOOP.run_in_executor(pool, sources_network_info,
                                                  msg_data.get('source_id'),
                                                  msg_data.get('auth_header'))
-        elif msg_data.get('event_type') == KAFKA_AUTHENTICATION_CREATE:
+        elif msg_data.get('event_type') in (KAFKA_AUTHENTICATION_CREATE, KAFKA_AUTHENTICATION_UPDATE):
             with concurrent.futures.ThreadPoolExecutor() as pool:
                 await EVENT_LOOP.run_in_executor(pool, sources_network_auth_info,
                                                  msg_data.get('resource_id'),
                                                  msg_data.get('auth_header'))
+                msg_data['source_id'] = storage.get_source_from_endpoint(msg_data.get('resource_id'))
         elif msg_data.get('event_type') in (KAFKA_APPLICATION_DESTROY, KAFKA_SOURCE_DESTROY):
             await storage.enqueue_source_delete(in_progress_queue, msg_data.get('source_id'))
+
+        if msg_data.get('event_type') in (KAFKA_SOURCE_UPDATE, KAFKA_AUTHENTICATION_UPDATE):
+            await storage.enqueue_source_update(in_progress_queue, msg_data.get('source_id'))
 
 
 async def listen_for_messages(consumer, application_source_id, msg_pending_queue):  # pragma: no cover
@@ -363,6 +369,11 @@ def execute_koku_provider_op(msg):
                 response = koku_client.destroy_provider(provider.koku_uuid)
                 LOG.info(f'Koku Provider UUID ({provider.koku_uuid}) Removal Status Code: {str(response.status_code)}')
             storage.destroy_provider_event(provider.source_id)
+        elif operation == 'update':
+            koku_details = koku_client.update_provider(provider.name, provider.source_type, provider.authentication,
+                                                       provider.billing_source)
+            LOG.info(f'Koku Provider UUID {koku_details.get("uuid")} with Source ID {str(provider.source_id)} updated.')
+
     except KokuHTTPClientError as koku_error:
         raise SourcesIntegrationError('Koku provider error: ', str(koku_error))
     except KokuHTTPClientNonRecoverableError as koku_error:

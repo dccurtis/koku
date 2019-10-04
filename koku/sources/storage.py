@@ -143,6 +143,26 @@ async def enqueue_source_delete(queue, source_id):
         LOG.error('Unable to enqueue source delete.  %s not found.', str(source_id))
 
 
+async def enqueue_source_update(queue, source_id):
+    """
+    Queues a source update event to be processed by the synchronize_sources method.
+
+    Args:
+        queue (Asyncio Queue) - process_queue containing all pending Souces-koku events.
+        source_id (Integer) - Platform-Sources identifier.
+
+    Returns:
+        None
+
+    """
+    try:
+        source = Sources.objects.get(source_id=source_id)
+        if source.koku_uuid:
+            await queue.put({'operation': 'update', 'provider': source})
+    except Sources.DoesNotExist:
+        LOG.error('Unable to enqueue source delete.  %s not found.', str(source_id))
+
+
 def create_provider_event(source_id, auth_header, offset):
     """
     Create a Sources database object.
