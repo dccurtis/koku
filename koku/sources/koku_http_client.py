@@ -131,7 +131,7 @@ class KokuHTTPClient:
             raise KokuHTTPClientNonRecoverableError('Unable to create provider. Error: ', str(r.json()))
         return r.json()
 
-    def update_provider(self, name, provider_type, authentication, billing_source):
+    def update_provider(self, provider_uuid, name, provider_type, authentication, billing_source):
         """Koku HTTP call to update provider."""
         url = '{}/{}/{}/'.format(self._base_url, 'providers', provider_uuid)
         json_data = {'name': name, 'type': provider_type,

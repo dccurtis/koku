@@ -68,13 +68,12 @@ def _extract_from_header(headers, header_type):
 
 
 def _collect_pending_items():
-    """Gather all sources to create or delete."""
+    """Gather all sources to create update, or delete."""
     create_events = storage.load_providers_to_create()
     update_events = storage.load_providers_to_update()
     destroy_events = storage.load_providers_to_delete()
     pending_events = create_events + update_events + destroy_events
-    # pending_events.sort(key=lambda item: item.get('offset'))
-    print(f'PENDING EVENTS: {str(pending_events)}')
+
     return pending_events
 
 
@@ -378,8 +377,8 @@ def execute_koku_provider_op(msg):
                 LOG.info(f'Koku Provider UUID ({provider.koku_uuid}) Removal Status Code: {str(response.status_code)}')
             storage.destroy_provider_event(provider.source_id)
         elif operation == 'update':
-            koku_details = koku_client.update_provider(provider.name, provider.source_type, provider.authentication,
-                                                       provider.billing_source)
+            koku_details = koku_client.update_provider(provider.koku_uuid, provider.name, provider.source_type,
+                                                       provider.authentication, provider.billing_source)
             storage.clear_update_flag(provider.source_id)
             LOG.info(f'Koku Provider UUID {koku_details.get("uuid")} with Source ID {str(provider.source_id)} updated.')
 

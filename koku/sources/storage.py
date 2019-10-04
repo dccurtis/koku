@@ -118,7 +118,7 @@ def load_providers_to_update():
 
     """
     providers_to_update = []
-    providers = Sources.objects.filter(pending_update=True).all()
+    providers = Sources.objects.filter(pending_update=True, pending_delete=False).all()
     for provider in providers:
         if provider.koku_uuid:
             providers_to_update.append({'operation': 'update', 'provider': provider})
@@ -186,7 +186,7 @@ def enqueue_source_update(source_id):
     """
     try:
         source = Sources.objects.get(source_id=source_id)
-        if source.koku_uuid:
+        if source.koku_uuid and not source.pending_delete:
             source.pending_update = True
             source.save(update_fields=['pending_update'])
     except Sources.DoesNotExist:
@@ -342,8 +342,11 @@ def add_subscription_id_to_credentials(source_id, subscription_id):
         auth_dict = query.authentication
         auth_dict['credentials']['subscription_id'] = subscription_id
         query.authentication = auth_dict
-        query.pending_update = True
-        query.save(update_field=['authentication', 'pending_update'])
+        if query.koku_uuid:
+            query.pending_update = True
+            query.save(update_field=['authentication', 'pending_update'])
+        else:
+            query.save()
     except Sources.DoesNotExist:
         raise SourcesStorageError('Source does not exist')
 
@@ -381,8 +384,11 @@ def add_provider_billing_source(source_id, billing_source):
             raise SourcesStorageError('Source is not AWS nor AZURE.')
         _validate_billing_source(query.source_type, billing_source)
         query.billing_source = billing_source
-        query.pending_update = True
-        query.save(update_fields=['billing_source', 'pending_update'])
+        if query.koku_uuid:
+            query.pending_update = True
+            query.save(update_fields=['billing_source', 'pending_update'])
+        else:
+            query.save()
     except Sources.DoesNotExist:
         raise SourcesStorageError('Source does not exist')
 
