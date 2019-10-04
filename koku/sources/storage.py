@@ -152,7 +152,7 @@ def load_providers_to_delete():
     return providers_to_delete
 
 
-async def enqueue_source_delete(queue, source_id):
+def enqueue_source_delete(source_id):
     """
     Queues a source destroy event to be processed by the synchronize_sources method.
 
@@ -168,7 +168,6 @@ async def enqueue_source_delete(queue, source_id):
         source = Sources.objects.get(source_id=source_id)
         source.pending_delete = True
         source.save()
-        await queue.put({'operation': 'destroy', 'provider': source})
     except Sources.DoesNotExist:
         LOG.error('Unable to enqueue source delete.  %s not found.', str(source_id))
 

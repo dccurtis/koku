@@ -102,8 +102,11 @@ def storage_callback(sender, instance, **kwargs):
     update_fields = kwargs.get('update_fields', ())
     if update_fields:
         if 'pending_update' in update_fields:
-            if instance.koku_uuid and instance.pending_update:
+            if instance.koku_uuid and instance.pending_update and not instance.pending_delete:
                 PROCESS_QUEUE.put_nowait({'operation': 'update', 'provider': instance})
+
+    if instance.pending_delete:
+        PROCESS_QUEUE.put_nowait({'operation': 'destroy', 'provider': instance})
 
     process_event = storage.screen_and_build_provider_sync_create_event(instance)
     if process_event:
@@ -308,7 +311,7 @@ async def process_messages(msg_pending_queue, in_progress_queue):  # pragma: no 
                                                  msg_data.get('auth_header'))
                 msg_data['source_id'] = storage.get_source_from_endpoint(msg_data.get('resource_id'))
         elif msg_data.get('event_type') in (KAFKA_APPLICATION_DESTROY, KAFKA_SOURCE_DESTROY):
-            await storage.enqueue_source_delete(in_progress_queue, msg_data.get('source_id'))
+            storage.enqueue_source_delete(msg_data.get('source_id'))
 
         if msg_data.get('event_type') in (KAFKA_SOURCE_UPDATE, KAFKA_AUTHENTICATION_UPDATE):
             storage.enqueue_source_update(msg_data.get('source_id'))
