@@ -134,6 +134,8 @@ class ProviderViewSet(mixins.CreateModelMixin,
     @never_cache
     def update(self, request, *args, **kwargs):
         """Update a Provider."""
+        manager = ProviderManager(kwargs['uuid'])
+        manager.update(request)
         if request.method == 'PATCH':
             raise ProviderMethodException('PATCH not supported')
         return super().update(request=request, args=args, kwargs=kwargs)
