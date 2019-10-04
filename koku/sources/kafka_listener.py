@@ -23,7 +23,7 @@ import threading
 import time
 
 from aiokafka import AIOKafkaConsumer
-from django.db.models.signals import post_save
+from django.db.models.signals import post_save, pre_save
 from django.dispatch import receiver
 from kafka.errors import KafkaError
 from sources import storage
@@ -93,6 +93,14 @@ def load_process_queue():
     pending_events = _collect_pending_items()
     for event in pending_events:
         PROCESS_QUEUE.put_nowait(event)
+
+
+@receiver(pre_save, sender=Sources)
+def storage_callback_pre_save(sender, instance, **kwargs):
+    """Load Sources ready for Koku Synchronization when Sources table is updated."""
+    process_event = storage.screen_and_build_provider_sync_update_event(instance)
+    # if process_event:
+        # PROCESS_QUEUE.put_nowait(process_event)
 
 
 @receiver(post_save, sender=Sources)
