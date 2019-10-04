@@ -378,8 +378,8 @@ def execute_koku_provider_op(msg):
                 LOG.info(f'Koku Provider UUID ({provider.koku_uuid}) Removal Status Code: {str(response.status_code)}')
             storage.destroy_provider_event(provider.source_id)
         elif operation == 'update':
-            koku_details = koku_client.update_provider(provider.name, provider.source_type, provider.authentication,
-                                                       provider.billing_source)
+            koku_details = koku_client.update_provider(provider.koku_uuid, provider.name, provider.source_type,
+                                                       provider.authentication, provider.billing_source)
             storage.clear_update_flag(provider.source_id)
             LOG.info(f'Koku Provider UUID {koku_details.get("uuid")} with Source ID {str(provider.source_id)} updated.')
 
