@@ -58,16 +58,6 @@ def _azure_provider_ready_for_create(provider):
     return False
 
 
-def screen_and_build_provider_sync_update_event(provider):
-    """Determine if the source should be queued for synchronization."""
-    try:
-        source = Sources.objects.get(source_id=provider.source_id)
-        if source.billing_source != provider.billing_source:
-            print(f'OLD Value: {source.billing_source}  NEW Value: {provider.billing_source}')
-    except Sources.DoesNotExist:
-        LOG.error('Unable to enqueue source delete.  %s not found.', str(provider.source_id))
-
-
 def screen_and_build_provider_sync_create_event(provider):
     """Determine if the source should be queued for synchronization."""
     provider_event = {}
@@ -118,10 +108,10 @@ def load_providers_to_update():
 
     """
     providers_to_update = []
-    providers = Sources.objects.filter(pending_update=True, pending_delete=False).all()
+    providers = Sources.objects.filter(pending_update=True, pending_delete=False,
+                                       koku_uuid__isnull=False).all()
     for provider in providers:
-        if provider.koku_uuid:
-            providers_to_update.append({'operation': 'update', 'provider': provider})
+        providers_to_update.append({'operation': 'update', 'provider': provider})
 
     return providers_to_update
 
@@ -343,7 +333,7 @@ def add_subscription_id_to_credentials(source_id, subscription_id):
         query.authentication = auth_dict
         if query.koku_uuid:
             query.pending_update = True
-            query.save(update_field=['authentication', 'pending_update'])
+            query.save(update_fields=['authentication', 'pending_update'])
         else:
             query.save()
     except Sources.DoesNotExist:

@@ -100,10 +100,9 @@ def load_process_queue():
 def storage_callback(sender, instance, **kwargs):
     """Load Sources ready for Koku Synchronization when Sources table is updated."""
     update_fields = kwargs.get('update_fields', ())
-    if update_fields:
-        if 'pending_update' in update_fields:
-            if instance.koku_uuid and instance.pending_update and not instance.pending_delete:
-                PROCESS_QUEUE.put_nowait({'operation': 'update', 'provider': instance})
+    if update_fields and 'pending_update' in update_fields:
+        if instance.koku_uuid and instance.pending_update and not instance.pending_delete:
+            PROCESS_QUEUE.put_nowait({'operation': 'update', 'provider': instance})
 
     if instance.pending_delete:
         PROCESS_QUEUE.put_nowait({'operation': 'destroy', 'provider': instance})
@@ -269,7 +268,7 @@ def sources_network_info(source_id, auth_header):
     save_auth_info(auth_header, source_id)
 
 
-async def process_messages(msg_pending_queue, in_progress_queue):  # pragma: no cover
+async def process_messages(msg_pending_queue):  # pragma: no cover
     """
     Process messages from Platform-Sources kafka service.
 
@@ -282,10 +281,7 @@ async def process_messages(msg_pending_queue, in_progress_queue):  # pragma: no 
 
     Args:
         msg_pending_queue (Asyncio queue): Queue to hold kafka messages to be filtered
-        in_progress_queue (Asyncio queue): Queue for filtered cost management messages awaiting
-            Koku-Provider synchronization.
-        application_source_id (Integer): Cost Management's current Application Source ID. Used for
-            kafka message filtering.
+
 
     Returns:
         None
@@ -323,6 +319,8 @@ async def listen_for_messages(consumer, application_source_id, msg_pending_queue
 
     Args:
         consumer (AIOKafkaConsumer): Kafka consumer object
+        application_source_id (Integer): Cost Management's current Application Source ID. Used for
+            kafka message filtering.
         msg_pending_queue (Asyncio queue): Queue to hold kafka messages to be filtered
 
     Returns:
@@ -463,7 +461,7 @@ def asyncio_sources_thread(event_loop):  # pragma: no cover
         load_process_queue()
         while True:
             event_loop.create_task(listen_for_messages(consumer, cost_management_type_id, PENDING_PROCESS_QUEUE))
-            event_loop.create_task(process_messages(PENDING_PROCESS_QUEUE, PROCESS_QUEUE))
+            event_loop.create_task(process_messages(PENDING_PROCESS_QUEUE))
             event_loop.create_task(synchronize_sources(PROCESS_QUEUE))
             event_loop.run_forever()
     except SourcesHTTPClientError as error:
