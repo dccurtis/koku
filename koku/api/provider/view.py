@@ -138,6 +138,13 @@ class ProviderViewSet(mixins.CreateModelMixin,
         manager.update(request)
         if request.method == 'PATCH':
             raise ProviderMethodException('PATCH not supported')
+        user = request.user
+        uuid = UUIDField().to_internal_value(data=kwargs.get('uuid'))
+        get_object_or_404(Provider, uuid=uuid, customer=user.customer)
+
+        manager = ProviderManager(kwargs['uuid'])
+        manager.update(request)
+
         return super().update(request=request, args=args, kwargs=kwargs)
 
     @never_cache
