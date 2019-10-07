@@ -58,16 +58,6 @@ def _azure_provider_ready_for_create(provider):
     return False
 
 
-def screen_and_build_provider_sync_update_event(provider):
-    """Determine if the source should be queued for synchronization."""
-    try:
-        source = Sources.objects.get(source_id=provider.source_id)
-        if source.billing_source != provider.billing_source:
-            print(f'OLD Value: {source.billing_source}  NEW Value: {provider.billing_source}')
-    except Sources.DoesNotExist:
-        LOG.error('Unable to enqueue source delete.  %s not found.', str(provider.source_id))
-
-
 def screen_and_build_provider_sync_create_event(provider):
     """Determine if the source should be queued for synchronization."""
     provider_event = {}
