@@ -21,6 +21,7 @@
 # we expect this situation to be temporary as we iterate on these details.
 import datetime
 import os
+import asyncio
 
 from celery.utils.log import get_task_logger
 
@@ -38,6 +39,8 @@ from masu.processor.report_summary_updater import ReportSummaryUpdater
 
 LOG = get_task_logger(__name__)
 
+
+async def process_reports_asyncio(reports):
 
 # pylint: disable=too-many-locals
 @celery.task(name='masu.processor.tasks.get_report_files', queue_name='download')
@@ -74,6 +77,8 @@ def get_report_files(customer_name,
                                 provider_uuid)
 
     try:
+        event_loop = asyncio.new_event_loop()
+        ...
         LOG.info('Reports to be processed: %s', str(reports))
         reports_to_summarize = []
         for report_dict in reports:
@@ -116,7 +121,7 @@ def get_report_files(customer_name,
         worker_stats.PROCESS_REPORT_ERROR_COUNTER.labels(provider_type=provider_type).inc()
         LOG.error(str(processing_error))
 
-    return reports_to_summarize
+        return reports_to_summarize
 
 
 @celery.task(name='masu.processor.tasks.remove_expired_data', queue_name='remove_expired')
