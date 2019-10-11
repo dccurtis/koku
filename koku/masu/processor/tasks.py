@@ -39,8 +39,51 @@ from masu.processor.report_summary_updater import ReportSummaryUpdater
 
 LOG = get_task_logger(__name__)
 
+def _process_report_meat(report_dict):
+    manifest_id = report_dict.get('manifest_id')
+    file_name = os.path.basename(report_dict.get('file'))
+    with ReportStatsDBAccessor(file_name, manifest_id) as stats:
+        started_date = stats.get_last_started_datetime()
+        completed_date = stats.get_last_completed_datetime()
+
+    # Skip processing if already in progress.
+    if started_date and not completed_date:
+        expired_start_date = started_date + datetime.timedelta(hours=2)
+        if DateAccessor().today_with_timezone('UTC') < expired_start_date:
+            LOG.info('Skipping processing task for %s since it was started at: %s.',
+                     file_name, str(started_date))
+            return {}
+
+    # Skip processing if complete.
+    if started_date and completed_date:
+        LOG.info('Skipping processing task for %s. Started on: %s and completed on: %s.',
+                 file_name, str(started_date), str(completed_date))
+        return {}
+
+    LOG.info('Processing starting - schema_name: %s, provider_uuid: %s, File: %s',
+             schema_name, provider_uuid, report_dict.get('file'))
+    worker_stats.PROCESS_REPORT_ATTEMPTS_COUNTER.labels(provider_type=provider_type).inc()
+    _process_report_file(schema_name,
+                         provider_type,
+                         provider_uuid,
+                         report_dict)
+    report_meta = {}
+    known_manifest_ids = [report.get('manifest_id') for report in reports_to_summarize]
+    if report_dict.get('manifest_id') not in known_manifest_ids:
+        report_meta['schema_name'] = schema_name
+        report_meta['provider_type'] = provider_type
+        report_meta['provider_uuid'] = provider_uuid
+        report_meta['manifest_id'] = report_dict.get('manifest_id')
+
+    return report_meta
+
+async def process_report(report):
+    pass
 
 async def process_reports_asyncio(reports):
+    reports_to_summarize = []
+    for report_dict in reports:
+
 
 # pylint: disable=too-many-locals
 @celery.task(name='masu.processor.tasks.get_report_files', queue_name='download')
@@ -77,10 +120,9 @@ def get_report_files(customer_name,
                                 provider_uuid)
 
     try:
-        event_loop = asyncio.new_event_loop()
-        ...
         LOG.info('Reports to be processed: %s', str(reports))
-        reports_to_summarize = []
+        event_loop = asyncio.new_event_loop(process_reports_asyncio(reports))
+        event_loop.run_until_complete()
         for report_dict in reports:
             manifest_id = report_dict.get('manifest_id')
             file_name = os.path.basename(report_dict.get('file'))
