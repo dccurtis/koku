@@ -15,7 +15,6 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #
 """Report processor external interface."""
-
 import logging
 
 from masu.external import (AMAZON_WEB_SERVICES,

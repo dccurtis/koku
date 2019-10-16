@@ -16,12 +16,11 @@
 #
 
 """Processor for Cost Usage Reports."""
-
 import csv
 import json
 import logging
 from os import path
-
+from profilehooks import profile
 from tenant_schemas.utils import schema_context
 
 from masu.config import Config
@@ -111,6 +110,7 @@ class AWSReportProcessor(ReportProcessorBase):
         LOG.info('Initialized report processor for file: %s and schema: %s',
                  self._report_name, self._schema_name)
 
+    @profile(immediate=True)
     def process(self):
         """Process CUR file.
 
