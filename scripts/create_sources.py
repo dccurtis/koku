@@ -3,10 +3,10 @@ import argparse
 import sys
 import requests
 
-KOKU_SOURCES_CLIENT_HOST = os.getenv('KOKU_SOURCES_CLIENT_HOST', 'localhost')
-KOKU_SOURCES_CLIENT_PORT = os.getenv('KOKU_SOURCES_CLIENT_PORT', '8080')
+KOKU_API_HOST = os.getenv('KOKU_API_HOST', 'localhost')
+KOKU_API_PORT = os.getenv('KOKU_API_PORT', '8080')
 KOKU_API_PATH_PREFIX = os.getenv('KOKU_API_PATH_PREFIX', '/api/cost-management')
-KOKU_SOURCES_URL = f'http://{KOKU_SOURCES_CLIENT_HOST}:{KOKU_SOURCES_CLIENT_PORT}{KOKU_API_PATH_PREFIX}/v1'
+KOKU_API_URL = f'http://{KOKU_API_HOST}:{KOKU_API_PORT}{KOKU_API_PATH_PREFIX}/v1'
 
 SOURCES_API_HOST = os.getenv('SOURCES_API_HOST', 'localhost')
 SOURCES_API_PORT = os.getenv('SOURCES_API_PORT', '3000')
@@ -98,7 +98,7 @@ def create_parser():
 
 class SourcesClientDataGenerator:
     def __init__(self, auth_header):
-        self._base_url = KOKU_SOURCES_URL
+        self._base_url = KOKU_API_URL
 
         header = {'x-rh-identity': auth_header}
         self._identity_header = header

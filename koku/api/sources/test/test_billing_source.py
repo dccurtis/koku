@@ -19,7 +19,6 @@
 import json
 
 from django.test import TestCase
-from django.test.utils import override_settings
 from django.urls import reverse
 from faker import Faker
 from sources.config import Config
@@ -30,7 +29,6 @@ from api.provider.models import Sources
 faker = Faker()
 
 
-@override_settings(ROOT_URLCONF='sources.urls')
 class BillingSourceTests(TestCase):
     """Test Cases for the billing_source endpoint."""
 
