@@ -194,14 +194,17 @@ def save_auth_info(auth_header, source_id):
         elif source_type == 'AWS':
             authentication = {'resource_name': sources_network.get_aws_role_arn()}
         elif source_type == 'AZURE':
-            sources_auth, sources_storage = sources_network.get_azure_credentials()
+            sources_auth, cost_mgmt_details = sources_network.get_azure_credentials()
             authentication = {'credentials': sources_auth}
-            billing_source = {'data_source': sources_storage}
-            storage.add_provider_billing_source({'source_id': source_id}, billing_source)
+            if cost_mgmt_details:
+                authentication['credentials']['subscription_id'] = cost_mgmt_details.pop('subscription_id')
+                billing_source = {'data_source': cost_mgmt_details}
+                storage.add_provider_billing_source({'source_id': source_id}, billing_source)
         else:
             LOG.error(f'Unexpected source type: {source_type}')
             return
-        storage.add_provider_sources_auth_info(source_id, authentication)
+        if authentication:
+            storage.add_provider_sources_auth_info(source_id, authentication)
     except SourcesHTTPClientError:
         LOG.info(f'Authentication info not available for Source ID: {source_id}')
 

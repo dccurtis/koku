@@ -184,14 +184,10 @@ class SourcesDataGenerator:
         response = r.json()
         return response.get('id')
 
-    def create_azure_authentication(self, resource_id, username, password, tenant,
-                                    resource_group, storage_account, subscription_id):
-        json_data = {'authtype': 'access_key_secret_key_foo', 'name': 'Azure default', 'password': str(password),
+    def create_azure_authentication(self, resource_id, username, password, tenant):
+        json_data = {'authtype': 'access_key_secret_key', 'name': 'Azure default', 'password': str(password),
                      'status': 'valid', 'status_details': 'Details Here', 'username': str(username),
-                     'extra': {'azure': {'tenant_id': str(tenant),
-                                         'resource_group': str(resource_group),
-                                         'storage_account': str(storage_account),
-                                         'subscription_id': str(subscription_id)}},
+                     'extra': {'azure': {'tenant_id': str(tenant)}},
                      'resource_type': 'Endpoint',
                      'resource_id': str(resource_id)}
 
@@ -201,7 +197,7 @@ class SourcesDataGenerator:
         return response.get('id')
 
     def create_azure_authentication_app_specific(self, resource_id, resource_group, storage_account, subscription_id):
-        json_data = {'authtype': 'access_key_secret_key_foo', 'name': 'Azure Cost Management',
+        json_data = {'authtype': 'cost_mgmt_specific', 'name': 'Azure Cost Management',
                      'status': 'valid', 'status_details': 'Details Here',
                      'extra': {'azure': {'resource_group': str(resource_group),
                                          'storage_account': str(storage_account),
@@ -289,9 +285,8 @@ def main(args):
         storage_account = parameters.get('storage_account')
         resource_group = parameters.get('resource_group')
         subscription_id = parameters.get('subscription_id')
-        authentication_id = generator.create_azure_authentication(endpoint_id, client_id, client_secret, tenant_id,
-                                                                  resource_group, storage_account, subscription_id)
-        # auth_cost_id = generator.create_azure_authentication_app_specific(endpoint_id, resource_group, storage_account, subscription_id)
+        authentication_id = generator.create_azure_authentication(endpoint_id, client_id, client_secret, tenant_id)
+        auth_cost_id = generator.create_azure_authentication_app_specific(endpoint_id, resource_group, storage_account, subscription_id)
         print(
             f'Azure Provider Setup Successfully\n\tSource ID: {source_id}\n\tEndpoint ID: {endpoint_id}\n\tAuthentication ID: {authentication_id}')
 

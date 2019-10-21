@@ -120,6 +120,21 @@ class SourcesHTTPClient:
 
         return password
 
+    def _get_azure_specific_details(self, resource_id):
+        """Get Azure app-specific details from Sources Authentication service."""
+        authentications_url = \
+            (f'{self._base_url}/authentications?filter[resource_type]=Endpoint&'
+             f'[authtype]=cost_mgmt_specific&[resource_id]={str(resource_id)}')
+        r = requests.get(authentications_url, headers=self._identity_header)
+        authentications_response = r.json()
+        cost_specific = {}
+        if authentications_response.get('data'):
+            data_dict = authentications_response.get('data')[0]
+            cost_specific = {'subscription_id': data_dict.get('extra').get('azure').get('subscription_id'),
+                             'storage_account': data_dict.get('extra').get('azure').get('storage_account'),
+                             'resource_group': data_dict.get('extra').get('azure').get('resource_group')}
+        return cost_specific
+
     def get_azure_credentials(self):
         """Get the Azure Credentials from Sources Authentication service."""
         endpoint_url = '{}/endpoints?filter[source_id]={}'.format(self._base_url, str(self._source_id))
@@ -145,8 +160,6 @@ class SourcesHTTPClient:
 
         azure_credentials = {'client_id': data_dict.get('username'),
                              'client_secret': password,
-                             'tenant_id': data_dict.get('extra').get('azure').get('tenant_id'),
-                             'subscription_id': data_dict.get('extra').get('azure').get('subscription_id')}
-        azure_storage = {'storage_account': data_dict.get('extra').get('azure').get('storage_account'),
-                         'resource_group': data_dict.get('extra').get('azure').get('resource_group')}
-        return azure_credentials, azure_storage
+                             'tenant_id': data_dict.get('extra').get('azure').get('tenant_id')}
+
+        return azure_credentials, self._get_azure_specific_details(resource_id)
