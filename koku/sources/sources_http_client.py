@@ -145,5 +145,8 @@ class SourcesHTTPClient:
 
         azure_credentials = {'client_id': data_dict.get('username'),
                              'client_secret': password,
-                             'tenant_id': data_dict.get('extra').get('azure').get('tenant_id')}
-        return azure_credentials
+                             'tenant_id': data_dict.get('extra').get('azure').get('tenant_id'),
+                             'subscription_id': data_dict.get('extra').get('azure').get('subscription_id')}
+        azure_storage = {'storage_account': data_dict.get('extra').get('azure').get('storage_account'),
+                         'resource_group': data_dict.get('extra').get('azure').get('resource_group')}
+        return azure_credentials, azure_storage

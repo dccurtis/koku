@@ -194,7 +194,10 @@ def save_auth_info(auth_header, source_id):
         elif source_type == 'AWS':
             authentication = {'resource_name': sources_network.get_aws_role_arn()}
         elif source_type == 'AZURE':
-            authentication = {'credentials': sources_network.get_azure_credentials()}
+            sources_auth, sources_storage = sources_network.get_azure_credentials()
+            authentication = {'credentials': sources_auth}
+            billing_source = {'data_source': sources_storage}
+            storage.add_provider_billing_source({'source_id': source_id}, billing_source)
         else:
             LOG.error(f'Unexpected source type: {source_type}')
             return
