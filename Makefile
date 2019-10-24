@@ -19,7 +19,7 @@ DJANGO_MANAGE = DJANGO_READ_DOT_ENV_FILE=True $(PYTHON) $(PYDIR)/manage.py
 # if a value is defined in a parameter file, we try to use that.
 # otherwise, we use a default value
 NAME = $(or $(shell grep -h '^NAME=' openshift/parameters/* 2>/dev/null | uniq | awk -F= '{print $$2}'), koku)
-NAMESPACE = $(or $(shell grep -h '^[^\#]*NAMESPACE=' openshift/parameters/* 2>/dev/null | uniq | awk -F= '{print $$2}'), koku)
+NAMESPACE = $(or $(shell grep -h '^[^\#]*NAMESPACE=' openshift/parameters/* 2>/dev/null | uniq | awk -F= '{print $$2}'), secrets)
 
 OC_TEMPLATE_DIR = $(TOPDIR)/openshift
 OC_PARAM_DIR = $(OC_TEMPLATE_DIR)/parameters
