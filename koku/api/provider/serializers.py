@@ -18,7 +18,6 @@
 
 from django.db import IntegrityError, transaction
 from django.utils.translation import ugettext as _
-from providers.provider_access import ProviderAccessor
 from rest_framework import serializers
 from rest_framework.fields import empty
 
@@ -29,6 +28,7 @@ from api.provider.models import (Provider,
                                  ProviderAuthentication,
                                  ProviderBillingSource,
                                  Sources)
+from providers.provider_access import ProviderAccessor
 
 PROVIDER_CHOICE_LIST = [provider[0].lower() for provider in Provider.PROVIDER_CHOICES]
 
@@ -187,6 +187,7 @@ AUTHENTICATION_SERIALIZERS = {'AWS': AWSAuthenticationSerializer,
                               'AZURE': AzureAuthenticationSerializer,
                               'AZURE-local': AzureAuthenticationSerializer,
                               'GCP': GCPAuthenticationSerializer,
+                              'GCP-local': GCPAuthenticationSerializer,
                               'OCP': OCPAuthenticationSerializer,
                               'OCP_AWS': AWSAuthenticationSerializer}
 
@@ -197,6 +198,7 @@ BILLING_SOURCE_SERIALIZERS = {'AWS': AWSBillingSourceSerializer,
                               'AZURE': AzureBillingSourceSerializer,
                               'AZURE-local': AzureBillingSourceSerializer,
                               'GCP': GCPBillingSourceSerializer,
+                              'GCP-local': GCPBillingSourceSerializer,
                               'OCP': OCPBillingSourceSerializer,
                               'OCP_AWS': AWSBillingSourceSerializer}
 
