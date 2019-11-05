@@ -32,7 +32,7 @@ class OCPUsageReportPeriod(models.Model):
     class Meta:
         """Meta for OCPUsageReportPeriod."""
 
-        unique_together = ('cluster_id', 'report_period_start', 'provider_id')
+        unique_together = ('cluster_id', 'report_period_start', 'provider')
 
     cluster_id = models.CharField(max_length=50, null=False)
     report_period_start = models.DateTimeField(null=False)
@@ -42,9 +42,7 @@ class OCPUsageReportPeriod(models.Model):
     summary_data_updated_datetime = models.DateTimeField(null=True)
     derived_cost_datetime = models.DateTimeField(null=True)
 
-    # provider_id is intentionally not a foreign key
-    # to prevent masu complication
-    provider_id = models.IntegerField(null=True)
+    provider = models.ForeignKey('api.Provider', on_delete=models.CASCADE)
 
 
 class OCPUsageReport(models.Model):
@@ -70,7 +68,7 @@ class OCPUsageReport(models.Model):
     interval_end = models.DateTimeField(null=False)
 
     report_period = models.ForeignKey('OCPUsageReportPeriod',
-                                      on_delete=models.PROTECT)
+                                      on_delete=models.CASCADE)
 
 
 class OCPUsageLineItem(models.Model):
@@ -84,10 +82,10 @@ class OCPUsageLineItem(models.Model):
     id = models.BigAutoField(primary_key=True)
 
     report_period = models.ForeignKey('OCPUsageReportPeriod',
-                                      on_delete=models.PROTECT)
+                                      on_delete=models.CASCADE)
 
     report = models.ForeignKey('OCPUsageReport',
-                               on_delete=models.PROTECT)
+                               on_delete=models.CASCADE)
 
     # Kubernetes objects by convention have a max name length of 253 chars
     namespace = models.CharField(max_length=253, null=False)
@@ -194,6 +192,10 @@ class OCPUsageLineItemDaily(models.Model):
         ]
 
     id = models.BigAutoField(primary_key=True)
+
+    report_period = models.ForeignKey(
+        'OCPUsageReportPeriod', on_delete=models.CASCADE, null=True
+    )
 
     cluster_id = models.CharField(max_length=50, null=True)
 
@@ -303,7 +305,7 @@ class OCPUsageLineItemDaily(models.Model):
 
 
 class OCPUsageLineItemDailySummary(models.Model):
-    """A daily aggregation of line items.
+    """A daily aggregation of line items from pod and volume sources.
 
     This table is aggregated by OCP resource.
 
@@ -327,6 +329,10 @@ class OCPUsageLineItemDailySummary(models.Model):
                 fields=['node'],
                 name='summary_node_idx',
             ),
+            models.Index(
+                fields=['data_source'],
+                name='summary_data_source_idx',
+            ),
             GinIndex(
                 fields=['pod_labels'],
                 name='pod_labels_idx',
@@ -335,9 +341,16 @@ class OCPUsageLineItemDailySummary(models.Model):
 
     id = models.BigAutoField(primary_key=True)
 
+    report_period = models.ForeignKey(
+        'OCPUsageReportPeriod', on_delete=models.CASCADE, null=True
+    )
+
     cluster_id = models.CharField(max_length=50, null=True)
 
     cluster_alias = models.CharField(max_length=256, null=True)
+
+    # Whether the data comes from a pod or volume report
+    data_source = models.CharField(max_length=64, null=True)
 
     # Kubernetes objects by convention have a max name length of 253 chars
     namespace = models.CharField(max_length=253, null=False)
@@ -451,6 +464,73 @@ class OCPUsageLineItemDailySummary(models.Model):
         null=True
     )
 
+    # Volume specific fields
+    persistentvolumeclaim = models.CharField(max_length=253, null=True)
+
+    persistentvolume = models.CharField(max_length=253, null=True)
+
+    storageclass = models.CharField(max_length=50, null=True)
+
+    volume_labels = JSONField(null=True)
+
+    persistentvolumeclaim_capacity_gigabyte = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        null=True
+    )
+
+    persistentvolumeclaim_capacity_gigabyte_months = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        null=True
+    )
+
+    volume_request_storage_gigabyte_months = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        null=True
+    )
+
+    persistentvolumeclaim_usage_gigabyte_months = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        null=True
+    )
+
+    persistentvolumeclaim_charge_gb_month = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        null=True
+    )
+
+    # Cost columns moved in from the CostSummary table
+
+    infra_cost = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        null=True
+    )
+
+    # This field is used in place of infrastructure_cost when
+    # grouping by project
+    project_infra_cost = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        null=True
+    )
+
+    markup_cost = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        null=True
+    )
+
+    project_markup_cost = models.DecimalField(
+        max_digits=24,
+        decimal_places=6,
+        null=True
+    )
+
 
 class OCPUsagePodLabelSummary(models.Model):
     """A collection of all current existing tag key and values."""
@@ -475,10 +555,10 @@ class OCPStorageLineItem(models.Model):
     id = models.BigAutoField(primary_key=True)
 
     report_period = models.ForeignKey('OCPUsageReportPeriod',
-                                      on_delete=models.PROTECT)
+                                      on_delete=models.CASCADE)
 
     report = models.ForeignKey('OCPUsageReport',
-                               on_delete=models.PROTECT)
+                               on_delete=models.CASCADE)
 
     # Kubernetes objects by convention have a max name length of 253 chars
     namespace = models.CharField(max_length=253, null=False)
@@ -533,6 +613,10 @@ class OCPStorageLineItemDaily(models.Model):
 
     id = models.BigAutoField(primary_key=True)
 
+    report_period = models.ForeignKey(
+        'OCPUsageReportPeriod', on_delete=models.CASCADE, null=True
+    )
+
     cluster_id = models.CharField(max_length=50, null=True)
 
     cluster_alias = models.CharField(max_length=256, null=True)
@@ -580,92 +664,6 @@ class OCPStorageLineItemDaily(models.Model):
 
     persistentvolume_labels = JSONField(null=True)
     persistentvolumeclaim_labels = JSONField(null=True)
-
-
-class OCPStorageLineItemDailySummary(models.Model):
-    """A daily aggregation of storage line items.
-
-    This table is aggregated by OCP resource.
-
-    """
-
-    class Meta:
-        """Meta for OCPStorageLineItemDailySummary."""
-
-        db_table = 'reporting_ocpstoragelineitem_daily_summary'
-
-        indexes = [
-            models.Index(
-                fields=['usage_start'],
-                name='storage_summary_ocp_usage_idx',
-            ),
-            models.Index(
-                fields=['namespace'],
-                name='storage_summary_namespace_idx',
-            ),
-            models.Index(
-                fields=['node'],
-                name='storage_summary_node_idx',
-            ),
-            GinIndex(
-                fields=['volume_labels'],
-                name='storage_volume_labels_idx',
-            ),
-        ]
-
-    id = models.BigAutoField(primary_key=True)
-
-    cluster_id = models.CharField(max_length=50, null=True)
-
-    cluster_alias = models.CharField(max_length=256, null=True)
-
-    # Kubernetes objects by convention have a max name length of 253 chars
-    namespace = models.CharField(max_length=253, null=False)
-
-    persistentvolumeclaim = models.CharField(max_length=253)
-
-    persistentvolume = models.CharField(max_length=253)
-
-    storageclass = models.CharField(max_length=50, null=True)
-
-    pod = models.CharField(max_length=253, null=True)
-
-    node = models.CharField(max_length=253, null=True)
-
-    usage_start = models.DateTimeField(null=False)
-    usage_end = models.DateTimeField(null=False)
-
-    volume_labels = JSONField(null=True)
-
-    persistentvolumeclaim_capacity_gigabyte = models.DecimalField(
-        max_digits=24,
-        decimal_places=6,
-        null=True
-    )
-
-    persistentvolumeclaim_capacity_gigabyte_months = models.DecimalField(
-        max_digits=24,
-        decimal_places=6,
-        null=True
-    )
-
-    volume_request_storage_gigabyte_months = models.DecimalField(
-        max_digits=24,
-        decimal_places=6,
-        null=True
-    )
-
-    persistentvolumeclaim_usage_gigabyte_months = models.DecimalField(
-        max_digits=24,
-        decimal_places=6,
-        null=True
-    )
-
-    persistentvolumeclaim_charge_gb_month = models.DecimalField(
-        max_digits=24,
-        decimal_places=6,
-        null=True
-    )
 
 
 class OCPStorageVolumeLabelSummary(models.Model):

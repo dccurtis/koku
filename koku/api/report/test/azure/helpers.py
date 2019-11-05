@@ -259,12 +259,13 @@ class FakeAzureConfig(UserDict):
 class AzureReportDataGenerator:
     """Populate the database with Azure fake report data."""
 
-    def __init__(self, tenant, current_month_only=False, config=None):
+    def __init__(self, tenant, provider, current_month_only=False, config=None):
         """Set up the class."""
         self.tenant = tenant
         self.config = config if config else FakeAzureConfig()
         self.fake = Faker()
         self.dh = DateHelper()
+        self.provider_uuid = provider.uuid
 
         # generate a list of dicts with unique keys.
         self.period_ranges, self.report_ranges = self.report_period_and_range(
@@ -292,6 +293,10 @@ class AzureReportDataGenerator:
             if diff_from_first.days < 10:
                 report_days = 1 + diff_from_first.days
                 period = [(self.dh.this_month_start, self.dh.this_month_end)]
+                ranges = [list(self.dh.this_month_start + relativedelta(days=i)
+                               for i in range(report_days))]
+            else:
+                period = [(self.dh.this_month_start, self.dh.this_month_end)]
                 ranges = [list(self.dh.today - relativedelta(days=i)
                                for i in range(report_days))]
 
@@ -300,26 +305,33 @@ class AzureReportDataGenerator:
                       (self.dh.this_month_start, self.dh.this_month_end)]
 
             one_month_ago = self.dh.today - relativedelta(months=1)
-            ranges = [
-                list(one_month_ago - relativedelta(days=i) for i in range(10)),
-                list(self.dh.today - relativedelta(days=i) for i in range(10)),
-            ]
+            diff_from_first = self.dh.today - self.dh.this_month_start
+            if diff_from_first.days < 10:
+                report_days = 1 + diff_from_first.days
+                ranges = [
+                    list(self.dh.last_month_start + relativedelta(days=i) for i in range(report_days)),
+                    list(self.dh.this_month_start + relativedelta(days=i) for i in range(report_days)),
+                ]
+            else:
+                ranges = [
+                    list(one_month_ago - relativedelta(days=i) for i in range(10)),
+                    list(self.dh.today - relativedelta(days=i) for i in range(10)),
+                ]
         return (period, ranges)
 
-    def add_data_to_tenant(self, provider_id=None, fixed_fields=None):
+    def add_data_to_tenant(self, fixed_fields=None):
         """Populate tenant with data.
 
         Args:
-            provider_id (uuid) - provider uuid
+            provider_uuid (uuid) - provider uuid
             fixed_fields (list) - a list of field names the data generator should NOT randomize.
 
         """
         with tenant_context(self.tenant):
             for i, period in enumerate(self.period_ranges):
-                if provider_id:
-                    manifest = self._manifest(period[0], provider_id)
-                    self._report_status(manifest.billing_period_start_datetime,
-                                        manifest.id)
+                manifest = self._manifest(period[0], self.provider_uuid)
+                self._report_status(manifest.billing_period_start_datetime,
+                                    manifest.id)
                 for report_date in self.report_ranges[i]:
                     self._randomize_line_item(retained_fields=fixed_fields)
                     self._cost_entry_line_item_daily_summary(report_date)
@@ -344,7 +356,7 @@ class AzureReportDataGenerator:
             table.objects.all().delete()
 
     # pylint: disable=no-self-use
-    def _manifest(self, start, provider_id=1):
+    def _manifest(self, start, provider_uuid):
         """Populate a report manifest entry."""
         manifest_creation_datetime = start + relativedelta(days=random.randint(1, 27))
         manifest_updated_datetime = manifest_creation_datetime \
@@ -356,7 +368,7 @@ class AzureReportDataGenerator:
             'billing_period_start_datetime': start,
             'num_processed_files': 1,
             'num_total_files': 1,
-            'provider_id': provider_id
+            'provider_id': provider_uuid
         }
         manifest_entry = CostUsageReportManifest(**data)
         manifest_entry.save()
@@ -390,13 +402,16 @@ class AzureReportDataGenerator:
             last_day = self.dh.days_in_month(report_date)
             billing_period_end = report_date.replace(day=last_day)
 
-        obj = AzureCostEntryBill(billing_period_start=billing_period_start,
-                                 billing_period_end=billing_period_end,
-                                 summary_data_creation_datetime=self.dh.today,
-                                 summary_data_updated_datetime=self.dh.today,
-                                 finalized_datetime=None,
-                                 derived_cost_datetime=self.dh.today)
-        obj.save()
+        obj, _ = AzureCostEntryBill.objects.get_or_create(
+            billing_period_start=billing_period_start,
+            billing_period_end=billing_period_end,
+            summary_data_creation_datetime=self.dh.today,
+            summary_data_updated_datetime=self.dh.today,
+            finalized_datetime=None,
+            derived_cost_datetime=self.dh.today,
+            provider_id=self.provider_uuid
+        )
+        # obj.save()
         return obj
 
     def _cost_entry_product(self):

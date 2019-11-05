@@ -27,7 +27,7 @@ from masu.external.downloader.azure.azure_report_downloader import AzureReportDo
 from masu.external.downloader.azure.azure_service import AzureCostReportNotFound
 from masu.external.downloader.report_downloader_base import ReportDownloaderBase
 
-from masu.util.azure import common as utils
+from masu.util import common as utils
 
 from masu.test import MasuTestCase
 
@@ -112,7 +112,7 @@ class AzureReportDownloaderTest(MasuTestCase):
             customer_name=self.customer_name,
             auth_credential=self.auth_credential,
             billing_source=self.billing_source,
-            provider_id=self.azure_provider_id)
+            provider_uuid=self.azure_provider_uuid)
         self.mock_data = MockAzureService()
 
 

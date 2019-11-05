@@ -17,11 +17,13 @@
 """Test the Report views."""
 import datetime
 import random
+from decimal import Decimal
 from unittest.mock import patch
 from urllib.parse import quote_plus, urlencode
 
 from dateutil import relativedelta
-from django.db.models import Count, F, Sum
+from django.db.models import Count, DecimalField, F, Sum, Value
+from django.db.models.functions import Coalesce
 from django.http import HttpRequest, QueryDict
 from django.urls import reverse
 from rest_framework import status
@@ -30,13 +32,14 @@ from rest_framework.response import Response
 from rest_framework.test import APIClient
 from tenant_schemas.utils import tenant_context
 
-from api.iam.serializers import UserSerializer
 from api.iam.test.iam_test_case import IamTestCase
 from api.models import User
+from api.provider.test import create_generic_provider
 from api.query_handler import TruncDayString
+from api.report.ocp.view import OCPCpuView, OCPMemoryView
 from api.report.test.ocp.helpers import OCPReportDataGenerator
-from api.report.view import _generic_report
 from api.tags.ocp.queries import OCPTagQueryHandler
+from api.tags.ocp.view import OCPTagView
 from api.utils import DateHelper
 from reporting.models import CostSummary, OCPUsageLineItemDailySummary
 
@@ -54,11 +57,9 @@ class OCPReportViewTest(IamTestCase):
     def setUp(self):
         """Set up the customer view tests."""
         super().setUp()
-        self.data_generator = OCPReportDataGenerator(self.tenant)
+        _, self.provider = create_generic_provider('OCP', self.headers)
+        self.data_generator = OCPReportDataGenerator(self.tenant, self.provider)
         self.data_generator.add_data_to_tenant()
-        serializer = UserSerializer(data=self.user_data, context=self.request_context)
-        if serializer.is_valid(raise_exception=True):
-            serializer.save()
 
         self.report_ocp_cpu = {
             'group_by': {
@@ -199,14 +200,9 @@ class OCPReportViewTest(IamTestCase):
             }
         }
 
-    def tearDown(self):
-        """Tear down the test case."""
-        self.data_generator.remove_data_from_tenant()
-        self.data_generator.remove_data_from_reporting_common()
-
     @patch('api.report.ocp.query_handler.OCPReportQueryHandler')
-    def test_generic_report_ocp_cpu_success(self, mock_handler):
-        """Test OCP cpu generic report."""
+    def test_ocpcpuview_success(self, mock_handler):
+        """Test OCP cpu view report."""
         mock_handler.return_value.execute_query.return_value = self.report_ocp_cpu
         params = {
             'group_by[node]': '*',
@@ -228,13 +224,13 @@ class OCPReportViewTest(IamTestCase):
         request = Request(django_request)
         request.user = user
 
-        response = _generic_report(request, report='cpu', provider='ocp')
+        response = OCPCpuView().get(request)
         self.assertIsInstance(response, Response)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
     @patch('api.report.ocp.query_handler.OCPReportQueryHandler')
-    def test_generic_report_ocp_mem_success(self, mock_handler):
-        """Test OCP memory generic report."""
+    def test_ocpmemview_success(self, mock_handler):
+        """Test OCP memory view report."""
         mock_handler.return_value.execute_query.return_value = self.report_ocp_mem
         params = {
             'group_by[node]': '*',
@@ -256,7 +252,7 @@ class OCPReportViewTest(IamTestCase):
         request = Request(django_request)
         request.user = user
 
-        response = _generic_report(request, report='memory', provider='ocp')
+        response = OCPMemoryView().get(request)
         self.assertIsInstance(response, Response)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
 
@@ -563,15 +559,17 @@ class OCPReportViewTest(IamTestCase):
                 .filter(usage_start__date__gte=self.dh.this_month_start)\
                 .aggregate(
                     total=Sum(
-                        F('pod_charge_cpu_core_hours')  # noqa: W504
-                        + F('pod_charge_memory_gigabyte_hours')  # noqa: W504
-                        + F('persistentvolumeclaim_charge_gb_month')  # noqa: W504
-                        + F('project_infra_cost')
-                        + F('markup_cost')
+                        Coalesce(F('pod_charge_cpu_core_hours'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('pod_charge_memory_gigabyte_hours'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('persistentvolumeclaim_charge_gb_month'),
+                                   Value(0, output_field=DecimalField()))
+                        + Coalesce(F('infra_cost'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('markup_cost'), Value(0, output_field=DecimalField()))
                     )
                 ).get('total')
             expected_total = cost if cost is not None else 0
         total = data.get('meta', {}).get('total', {}).get('cost', {}).get('value', 0)
+        self.assertNotEqual(total, Decimal(0))
         self.assertEqual(total, expected_total)
 
     def test_execute_query_ocp_costs_with_delta(self):
@@ -604,11 +602,12 @@ class OCPReportViewTest(IamTestCase):
                 .filter(usage_start__date__gte=this_month_start)\
                 .aggregate(
                     total=Sum(
-                        F('pod_charge_cpu_core_hours')  # noqa: W504
-                        + F('pod_charge_memory_gigabyte_hours')  # noqa: W504
-                        + F('persistentvolumeclaim_charge_gb_month')  # noqa: W504
-                        + F('infra_cost')
-                        + F('markup_cost')
+                        Coalesce(F('pod_charge_cpu_core_hours'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('pod_charge_memory_gigabyte_hours'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('persistentvolumeclaim_charge_gb_month'),
+                                   Value(0, output_field=DecimalField()))
+                        + Coalesce(F('infra_cost'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('markup_cost'), Value(0, output_field=DecimalField()))
                     )
                 ).get('total')
             current_total = current_total if current_total is not None else 0
@@ -619,11 +618,12 @@ class OCPReportViewTest(IamTestCase):
                 .values(*['date'])\
                 .annotate(
                     total=Sum(
-                        F('pod_charge_cpu_core_hours')  # noqa: W504
-                        + F('pod_charge_memory_gigabyte_hours')  # noqa: W504
-                        + F('persistentvolumeclaim_charge_gb_month')  # noqa: W504
-                        + F('infra_cost')
-                        + F('markup_cost')
+                        Coalesce(F('pod_charge_cpu_core_hours'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('pod_charge_memory_gigabyte_hours'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('persistentvolumeclaim_charge_gb_month'),
+                                   Value(0, output_field=DecimalField()))
+                        + Coalesce(F('infra_cost'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('markup_cost'), Value(0, output_field=DecimalField()))
                     )
                 )
 
@@ -634,11 +634,12 @@ class OCPReportViewTest(IamTestCase):
                 .values(*['date'])\
                 .annotate(
                     total=Sum(
-                        F('pod_charge_cpu_core_hours')  # noqa: W504
-                        + F('pod_charge_memory_gigabyte_hours')  # noqa: W504
-                        + F('persistentvolumeclaim_charge_gb_month')  # noqa: W504
-                        + F('infra_cost')
-                        + F('markup_cost')
+                        Coalesce(F('pod_charge_cpu_core_hours'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('pod_charge_memory_gigabyte_hours'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('persistentvolumeclaim_charge_gb_month'),
+                                   Value(0, output_field=DecimalField()))
+                        + Coalesce(F('infra_cost'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('markup_cost'), Value(0, output_field=DecimalField()))
                     )
                 )
 
@@ -653,6 +654,7 @@ class OCPReportViewTest(IamTestCase):
 
         expected_delta = current_total - prev_total
         delta = data.get('meta', {}).get('delta', {}).get('value')
+        self.assertNotEqual(delta, Decimal(0))
         self.assertEqual(delta, expected_delta)
         for item in data.get('data'):
             date = item.get('date')
@@ -838,7 +840,7 @@ class OCPReportViewTest(IamTestCase):
         """Test that same-named projects across clusters are accounted for."""
         data_config = {'namespaces': ['project_one', 'project_two']}
         project_of_interest = data_config['namespaces'][0]
-        data_generator = OCPReportDataGenerator(self.tenant)
+        data_generator = OCPReportDataGenerator(self.tenant, self.provider)
         data_generator.add_data_to_tenant(**data_config)
         data_generator.add_data_to_tenant(**data_config)
 
@@ -915,13 +917,13 @@ class OCPReportViewTest(IamTestCase):
         data = response.json()
         for entry in data.get('data', []):
             for node in entry.get('nodes', []):
-                self.assertEqual(node.get('node'), node_of_interest)
+                self.assertIn(node.get('node'), node_of_interest)
 
     def test_execute_query_group_by_node_duplicate_projects(self):
         """Test that same-named nodes across clusters are accounted for."""
         data_config = {'nodes': ['node_one', 'node_two']}
         node_of_interest = data_config['nodes'][0]
-        data_generator = OCPReportDataGenerator(self.tenant)
+        data_generator = OCPReportDataGenerator(self.tenant, self.provider)
         data_generator.add_data_to_tenant(**data_config)
         data_generator.add_data_to_tenant(**data_config)
 
@@ -947,7 +949,7 @@ class OCPReportViewTest(IamTestCase):
         """Test that same-named nodes across clusters are accounted for."""
         data_config = {'nodes': ['node_one', 'node_two']}
         node_of_interest = data_config['nodes'][0]
-        data_generator = OCPReportDataGenerator(self.tenant)
+        data_generator = OCPReportDataGenerator(self.tenant, self.provider)
         data_generator.add_data_to_tenant(**data_config)
         data_generator.add_data_to_tenant(**data_config)
 
@@ -969,7 +971,9 @@ class OCPReportViewTest(IamTestCase):
 
     def test_execute_query_with_tag_filter(self):
         """Test that data is filtered by tag key."""
-        handler = OCPTagQueryHandler({'filter': {'type': 'pod'}}, '?filter[type]=pod', self.tenant)
+        url = '?filter[type]=pod'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         tag_keys = handler.get_tag_keys()
         filter_key = tag_keys[0]
 
@@ -1011,12 +1015,14 @@ class OCPReportViewTest(IamTestCase):
 
     def test_execute_costs_query_with_tag_filter(self):
         """Test that data is filtered by tag key."""
-        handler = OCPTagQueryHandler({'filter': {'type': 'pod'}}, '?filter[type]=pod', self.tenant)
+        url = '?filter[type]=pod'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         tag_keys = handler.get_tag_keys()
         filter_key = tag_keys[0]
 
         with tenant_context(self.tenant):
-            labels = CostSummary.objects\
+            labels = OCPUsageLineItemDailySummary.objects\
                 .filter(usage_start__gte=self.ten_days_ago)\
                 .filter(pod_labels__has_key=filter_key)\
                 .values('pod_labels')\
@@ -1027,11 +1033,16 @@ class OCPReportViewTest(IamTestCase):
             totals = CostSummary.objects\
                 .filter(usage_start__gte=self.ten_days_ago)\
                 .filter(**{f'pod_labels__{filter_key}': filter_value})\
-                .aggregate(cost=Sum(F('pod_charge_cpu_core_hours')                 # noqa: W503
-                                    + F('pod_charge_memory_gigabyte_hours')        # noqa: W503
-                                    + F('persistentvolumeclaim_charge_gb_month')   # noqa: W503
-                                    + F('infra_cost')                              # noqa: W503
-                                    + F('markup_cost')))
+                .aggregate(
+                    cost=Sum(
+                        Coalesce(F('pod_charge_cpu_core_hours'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('pod_charge_memory_gigabyte_hours'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('persistentvolumeclaim_charge_gb_month'),
+                                   Value(0, output_field=DecimalField()))
+                        + Coalesce(F('infra_cost'), Value(0, output_field=DecimalField()))
+                        + Coalesce(F('markup_cost'), Value(0, output_field=DecimalField()))
+                    )
+                )
 
         url = reverse('reports-openshift-costs')
         client = APIClient()
@@ -1046,11 +1057,14 @@ class OCPReportViewTest(IamTestCase):
         for key in totals:
             expected = totals[key]
             result = data_totals.get(key, {}).get('value')
+            self.assertNotEqual(result, Decimal(0))
             self.assertEqual(result, expected)
 
     def test_execute_query_with_wildcard_tag_filter(self):
         """Test that data is filtered to include entries with tag key."""
-        handler = OCPTagQueryHandler({'filter': {'type': 'pod'}}, '?filter[type]=pod', self.tenant)
+        url = '?filter[type]=pod'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         tag_keys = handler.get_tag_keys()
         filter_key = tag_keys[0]
 
@@ -1089,7 +1103,9 @@ class OCPReportViewTest(IamTestCase):
 
     def test_execute_query_with_tag_group_by(self):
         """Test that data is grouped by tag key."""
-        handler = OCPTagQueryHandler({'filter': {'type': 'pod'}}, '?filter[type]=pod', self.tenant)
+        url = '?filter[type]=pod'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         tag_keys = handler.get_tag_keys()
         group_by_key = tag_keys[0]
 
@@ -1109,7 +1125,9 @@ class OCPReportViewTest(IamTestCase):
 
     def test_execute_costs_query_with_tag_group_by(self):
         """Test that data is grouped by tag key."""
-        handler = OCPTagQueryHandler({'filter': {'type': 'pod'}}, '?filter[type]=pod', self.tenant)
+        url = '?filter[type]=pod'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         tag_keys = handler.get_tag_keys()
         group_by_key = tag_keys[0]
 
@@ -1129,7 +1147,7 @@ class OCPReportViewTest(IamTestCase):
 
     def test_execute_query_with_group_by_tag_and_limit(self):
         """Test that data is grouped by tag key and limited."""
-        data_generator = OCPReportDataGenerator(self.tenant, dated_tags=False)
+        data_generator = OCPReportDataGenerator(self.tenant, self.provider, dated_tags=False)
         data_generator.add_data_to_tenant()
         group_by_key = 'app_label'
 
@@ -1148,7 +1166,6 @@ class OCPReportViewTest(IamTestCase):
 
         data = response.json()
         data = data.get('data', [])
-        # default ordered by usage
         previous_tag_usage = data[0].get('app_labels', [])[0].get('values', [{}])[0].get('usage', {}).get('value', 0)
         for entry in data[0].get('app_labels', []):
             current_tag_usage = entry.get('values', [{}])[0].get('usage', {}).get('value', 0)
@@ -1486,7 +1503,9 @@ class OCPReportViewTest(IamTestCase):
 
     def test_execute_query_with_and_tag_filter(self):
         """Test the filter[and:tag:] param in the view."""
-        handler = OCPTagQueryHandler({'filter': {'type': 'pod'}}, '?filter[type]=pod', self.tenant)
+        url = '?filter[type]=pod'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         tag_keys = handler.get_tag_keys()
         filter_key = tag_keys[0]
 
@@ -1514,7 +1533,9 @@ class OCPReportViewTest(IamTestCase):
 
     def test_execute_query_with_and_tag_group_by(self):
         """Test the group_by[and:tag:] param in the view."""
-        handler = OCPTagQueryHandler({'filter': {'type': 'pod'}}, '?filter[type]=pod', self.tenant)
+        url = '?filter[type]=pod'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         tag_keys = handler.get_tag_keys()
         group_by_key = tag_keys[0]
 

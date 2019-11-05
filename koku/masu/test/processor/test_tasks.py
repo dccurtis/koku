@@ -81,7 +81,7 @@ class GetReportFileTests(MasuTestCase):
             authentication=account,
             provider_type='AWS',
             report_name=self.fake.word(),
-            provider_uuid=self.aws_test_provider_uuid,
+            provider_uuid=self.aws_provider_uuid,
             billing_source=self.fake.word(),
         )
 
@@ -104,7 +104,7 @@ class GetReportFileTests(MasuTestCase):
                 authentication=account,
                 provider_type='AWS',
                 report_name=self.fake.word(),
-                provider_uuid=self.aws_test_provider_uuid,
+                provider_uuid=self.aws_provider_uuid,
                 billing_source=self.fake.word(),
             )
             statement_found = False
@@ -122,12 +122,12 @@ class GetReportFileTests(MasuTestCase):
         """Test task for logging when temp directory does not exist."""
         logging.disable(logging.NOTSET)
 
-        Config.TMP_DIR = '/this/path/does/not/exist'
+        Config.PVC_DIR = '/this/path/does/not/exist'
 
         account = fake_arn(service='iam', generate_account_id=True)
         expected = (
             'INFO:masu.processor._tasks.download:Unable to find'
-            + f' available disk space. {Config.TMP_DIR} does not exist'
+            + f' available disk space. {Config.PVC_DIR} does not exist'
         )
         with self.assertLogs('masu.processor._tasks.download', level='INFO') as logger:
             _get_report_files(
@@ -135,7 +135,7 @@ class GetReportFileTests(MasuTestCase):
                 authentication=account,
                 provider_type='AWS',
                 report_name=self.fake.word(),
-                provider_uuid=self.aws_test_provider_uuid,
+                provider_uuid=self.aws_provider_uuid,
                 billing_source=self.fake.word(),
             )
             self.assertIn(expected, logger.output)
@@ -154,7 +154,7 @@ class GetReportFileTests(MasuTestCase):
                 authentication=account,
                 provider_type='AWS',
                 report_name=self.fake.word(),
-                provider_uuid=self.aws_test_provider_uuid,
+                provider_uuid=self.aws_provider_uuid,
                 billing_source=self.fake.word(),
             )
 
@@ -179,7 +179,7 @@ class GetReportFileTests(MasuTestCase):
                 authentication=account,
                 provider_type='AWS',
                 report_name=self.fake.word(),
-                provider_uuid=self.aws_test_provider_uuid,
+                provider_uuid=self.aws_provider_uuid,
                 billing_source=self.fake.word(),
             )
 
@@ -207,7 +207,7 @@ class GetReportFileTests(MasuTestCase):
                 authentication=account,
                 provider_type='AWS',
                 report_name=self.fake.word(),
-                provider_uuid=self.aws_test_provider_uuid,
+                provider_uuid=self.aws_provider_uuid,
                 billing_source=self.fake.word(),
             )
 
@@ -229,7 +229,7 @@ class GetReportFileTests(MasuTestCase):
                 authentication=account,
                 provider_type='AWS',
                 report_name=self.fake.word(),
-                provider_uuid=self.aws_test_provider_uuid,
+                provider_uuid=self.aws_provider_uuid,
                 billing_source=self.fake.word(),
             )
         except ReportDownloaderError:
@@ -247,7 +247,7 @@ class GetReportFileTests(MasuTestCase):
             authentication=account,
             provider_type='AWS',
             report_name=self.fake.word(),
-            provider_uuid=self.aws_test_provider_uuid,
+            provider_uuid=self.aws_provider_uuid,
             billing_source=self.fake.word(),
         )
         fake_status.assert_called_with(ProviderStatusCode.READY)
@@ -256,18 +256,19 @@ class GetReportFileTests(MasuTestCase):
 class ProcessReportFileTests(MasuTestCase):
     """Test Cases for the Orchestrator object."""
 
+    @patch('masu.processor._tasks.process.ProviderDBAccessor')
     @patch('masu.processor._tasks.process.ReportProcessor')
     @patch('masu.processor._tasks.process.ReportStatsDBAccessor')
     @patch('masu.processor._tasks.process.ReportManifestDBAccessor')
-    def test_process_file(
-        self, mock_manifest_accessor, mock_stats_accessor, mock_processor
+    def test_process_file_initial_ingest(
+        self, mock_manifest_accessor, mock_stats_accessor, mock_processor, mock_provider_accessor
     ):
-        """Test the process_report_file functionality."""
+        """Test the process_report_file functionality on initial ingest."""
         report_dir = tempfile.mkdtemp()
         path = '{}/{}'.format(report_dir, 'file1.csv')
         schema_name = self.schema
         provider = 'AWS'
-        provider_uuid = self.aws_test_provider_uuid
+        provider_uuid = self.aws_provider_uuid
         report_dict = {
             'file': path,
             'compression': 'gzip',
@@ -277,13 +278,52 @@ class ProcessReportFileTests(MasuTestCase):
         mock_proc = mock_processor()
         mock_stats_acc = mock_stats_accessor().__enter__()
         mock_manifest_acc = mock_manifest_accessor().__enter__()
+        mock_provider_acc = mock_provider_accessor().__enter__()
+        mock_provider_acc.get_setup_complete.return_value = False
 
         _process_report_file(schema_name, provider, provider_uuid, report_dict)
 
         mock_proc.process.assert_called()
+        mock_proc.remove_processed_files.assert_not_called()
         mock_stats_acc.log_last_started_datetime.assert_called()
         mock_stats_acc.log_last_completed_datetime.assert_called()
         mock_manifest_acc.mark_manifest_as_updated.assert_called()
+        mock_provider_acc.setup_complete.assert_called()
+        shutil.rmtree(report_dir)
+
+    @patch('masu.processor._tasks.process.ProviderDBAccessor')
+    @patch('masu.processor._tasks.process.ReportProcessor')
+    @patch('masu.processor._tasks.process.ReportStatsDBAccessor')
+    @patch('masu.processor._tasks.process.ReportManifestDBAccessor')
+    def test_process_file_non_initial_ingest(
+        self, mock_manifest_accessor, mock_stats_accessor, mock_processor, mock_provider_accessor
+    ):
+        """Test the process_report_file functionality on non-initial ingest."""
+        report_dir = tempfile.mkdtemp()
+        path = '{}/{}'.format(report_dir, 'file1.csv')
+        schema_name = self.schema
+        provider = 'AWS'
+        provider_uuid = self.aws_provider_uuid
+        report_dict = {
+            'file': path,
+            'compression': 'gzip',
+            'start_date': str(DateAccessor().today()),
+        }
+
+        mock_proc = mock_processor()
+        mock_stats_acc = mock_stats_accessor().__enter__()
+        mock_manifest_acc = mock_manifest_accessor().__enter__()
+        mock_provider_acc = mock_provider_accessor().__enter__()
+        mock_provider_acc.get_setup_complete.return_value = True
+
+        _process_report_file(schema_name, provider, provider_uuid, report_dict)
+
+        mock_proc.process.assert_called()
+        mock_proc.remove_processed_files.assert_called()
+        mock_stats_acc.log_last_started_datetime.assert_called()
+        mock_stats_acc.log_last_completed_datetime.assert_called()
+        mock_manifest_acc.mark_manifest_as_updated.assert_called()
+        mock_provider_acc.setup_complete.assert_called()
         shutil.rmtree(report_dir)
 
     @patch('masu.processor._tasks.process.ReportProcessor')
@@ -294,7 +334,7 @@ class ProcessReportFileTests(MasuTestCase):
         path = '{}/{}'.format(report_dir, 'file1.csv')
         schema_name = self.schema
         provider = 'AWS'
-        provider_uuid = self.aws_test_provider_uuid
+        provider_uuid = self.aws_provider_uuid
         report_dict = {
             'file': path,
             'compression': 'gzip',
@@ -323,7 +363,7 @@ class ProcessReportFileTests(MasuTestCase):
         path = '{}/{}'.format(report_dir, 'file1.csv')
         schema_name = self.schema
         provider = 'AWS'
-        provider_uuid = self.aws_test_provider_uuid
+        provider_uuid = self.aws_provider_uuid
         report_dict = {
             'file': path,
             'compression': 'gzip',
@@ -397,7 +437,7 @@ class TestProcessorTasks(MasuTestCase):
             'provider_type': 'AWS',
             'schema_name': self.fake.word(),
             'billing_source': self.fake.word(),
-            'provider_uuid': self.aws_test_provider_uuid,
+            'provider_uuid': self.aws_provider_uuid,
         }
 
     @patch('masu.processor.tasks.ReportStatsDBAccessor.get_last_completed_datetime')
@@ -561,7 +601,7 @@ class TestRemoveExpiredDataTasks(MasuTestCase):
         ]
         fake_remover.return_value = expected_results
 
-        expected = 'INFO:masu.processor._tasks.remove_expired:Expired Data: {}'
+        expected = 'INFO:masu.processor._tasks.remove_expired:Expired Data:\n {}'
 
         # disable logging override set in masu/__init__.py
         logging.disable(logging.NOTSET)
@@ -606,7 +646,7 @@ class TestUpdateSummaryTablesTask(MasuTestCase):
 
         for cost_entry_date in (self.start_date, last_month):
             bill = self.creator.create_cost_entry_bill(
-                provider_id=self.aws_provider.id, bill_date=cost_entry_date
+                provider_uuid=self.aws_provider_uuid, bill_date=cost_entry_date
             )
             cost_entry = self.creator.create_cost_entry(bill, cost_entry_date)
             for family in [
@@ -624,12 +664,12 @@ class TestUpdateSummaryTablesTask(MasuTestCase):
         provider_ocp_uuid = self.ocp_test_provider_uuid
 
         with ProviderDBAccessor(provider_uuid=provider_ocp_uuid) as provider_accessor:
-            provider_id = provider_accessor.get_provider().id
+            provider_uuid = provider_accessor.get_provider().uuid
 
         cluster_id = self.ocp_provider_resource_name
         for period_date in (self.start_date, last_month):
             period = self.creator.create_ocp_report_period(
-                period_date, provider_id=provider_id, cluster_id=cluster_id
+                provider_uuid=provider_uuid, period_date=period_date, cluster_id=cluster_id
             )
             report = self.creator.create_ocp_report(period, period_date)
             for _ in range(25):
@@ -640,7 +680,7 @@ class TestUpdateSummaryTablesTask(MasuTestCase):
     def test_update_summary_tables_aws(self, mock_charge_info, mock_cost_summary):
         """Test that the summary table task runs."""
         provider = 'AWS'
-        provider_aws_uuid = self.aws_test_provider_uuid
+        provider_aws_uuid = self.aws_provider_uuid
 
         daily_table_name = AWS_CUR_TABLE_MAP['line_item_daily']
         summary_table_name = AWS_CUR_TABLE_MAP['line_item_daily_summary']
@@ -671,7 +711,7 @@ class TestUpdateSummaryTablesTask(MasuTestCase):
     def test_update_summary_tables_aws_end_date(self, mock_charge_info):
         """Test that the summary table task respects a date range."""
         provider = 'AWS'
-        provider_aws_uuid = self.aws_test_provider_uuid
+        provider_aws_uuid = self.aws_provider_uuid
         ce_table_name = AWS_CUR_TABLE_MAP['cost_entry']
         daily_table_name = AWS_CUR_TABLE_MAP['line_item_daily']
         summary_table_name = AWS_CUR_TABLE_MAP['line_item_daily_summary']
@@ -773,7 +813,7 @@ class TestUpdateSummaryTablesTask(MasuTestCase):
             provider_obj = provider_accessor.get_provider()
 
         usage_period_qry = self.ocp_accessor.get_usage_period_query_by_provider(
-            provider_obj.id
+            provider_obj.uuid
         )
         with schema_context(self.schema):
             cluster_id = usage_period_qry.first().cluster_id
@@ -794,9 +834,10 @@ class TestUpdateSummaryTablesTask(MasuTestCase):
                 self.assertIsNotNone(item.volume_request_storage_byte_seconds)
                 self.assertIsNotNone(item.persistentvolumeclaim_usage_byte_seconds)
 
-            storage_summary_name = OCP_REPORT_TABLE_MAP['storage_line_item_daily_summary']
+            storage_summary_name = OCP_REPORT_TABLE_MAP['line_item_daily_summary']
             items = self.ocp_accessor._get_db_obj_query(storage_summary_name).filter(
-                cluster_id=cluster_id
+                cluster_id=cluster_id,
+                data_source='Storage'
             )
             for item in items:
                 self.assertIsNotNone(item.volume_request_storage_gigabyte_months)

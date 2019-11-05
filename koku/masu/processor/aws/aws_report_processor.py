@@ -22,12 +22,9 @@ import json
 import logging
 from os import path
 
-from tenant_schemas.utils import schema_context
-
 from masu.config import Config
 from masu.database import AWS_CUR_TABLE_MAP
 from masu.database.aws_report_db_accessor import AWSReportDBAccessor
-from masu.database.report_manifest_db_accessor import ReportManifestDBAccessor
 from masu.database.reporting_common_db_accessor import ReportingCommonDBAccessor
 from masu.processor.report_processor_base import ReportProcessorBase
 from reporting.provider.aws.models import (AWSCostEntry,
@@ -71,7 +68,7 @@ class AWSReportProcessor(ReportProcessorBase):
     """Cost Usage Report processor."""
 
     # pylint:disable=too-many-arguments
-    def __init__(self, schema_name, report_path, compression, provider_id, manifest_id=None):
+    def __init__(self, schema_name, report_path, compression, provider_uuid, manifest_id=None):
         """Initialize the report processor.
 
         Args:
@@ -85,7 +82,8 @@ class AWSReportProcessor(ReportProcessorBase):
             schema_name=schema_name,
             report_path=report_path,
             compression=compression,
-            provider_id=provider_id,
+            provider_uuid=provider_uuid,
+            manifest_id=manifest_id,
             processed_report=ProcessedReport()
         )
 
@@ -108,8 +106,13 @@ class AWSReportProcessor(ReportProcessorBase):
 
         self.line_item_columns = None
 
-        LOG.info('Initialized report processor for file: %s and schema: %s',
-                 self._report_name, self._schema_name)
+        stmt = (
+            f'Initialized report processor for:\n'
+            f' schema_name: {self._schema_name}\n'
+            f' provider_uuid: {provider_uuid}\n'
+            f' file: {self._report_name}'
+        )
+        LOG.info(stmt)
 
     def process(self):
         """Process CUR file.
@@ -119,7 +122,7 @@ class AWSReportProcessor(ReportProcessorBase):
 
         """
         row_count = 0
-        self._delete_line_items()
+        self._delete_line_items(AWSReportDBAccessor, self.column_map)
         opener, mode = self._get_file_opener(self._compression)
         is_finalized_data = self._check_for_finalized_bill()
         # pylint: disable=invalid-name
@@ -171,32 +174,6 @@ class AWSReportProcessor(ReportProcessorBase):
             row = reader.__next__()
             invoice_id = row.get('bill/InvoiceId')
             return invoice_id is not None and invoice_id != ''
-
-    def _delete_line_items(self):
-        """Delete stale data for the report being processed, if necessary."""
-        if not self.manifest_id:
-            return False
-
-        with ReportManifestDBAccessor() as manifest_accessor:
-            manifest = manifest_accessor.get_manifest_by_id(self.manifest_id)
-            if manifest.num_processed_files != 0:
-                return False
-            # Override the bill date to correspond with the manifest
-            bill_date = manifest.billing_period_start_datetime.date()
-            provider_id = manifest.provider_id
-
-        LOG.info('Deleting data for schema: %s and bill date: %s',
-                 self._schema_name, str(bill_date))
-
-        with AWSReportDBAccessor(self._schema_name, self.column_map) as accessor:
-            bills = accessor.get_cost_entry_bills_query_by_provider(provider_id)
-            bills = bills.filter(billing_period_start=bill_date).all()
-            with schema_context(self._schema_name):
-                for bill in bills:
-                    line_item_query = accessor.get_lineitem_query_for_billid(bill.id)
-                    line_item_query.delete()
-
-        return True
 
     def _update_mappings(self):
         """Update cache of database objects for reference."""
@@ -285,7 +262,7 @@ class AWSReportProcessor(ReportProcessorBase):
         bill_type = row.get('bill/BillType')
         payer_account_id = row.get('bill/PayerAccountId')
 
-        key = (bill_type, payer_account_id, start_date, self._provider_id)
+        key = (bill_type, payer_account_id, start_date, self._provider_uuid)
         if key in self.processed_report.bills:
             return self.processed_report.bills[key]
 
@@ -294,7 +271,7 @@ class AWSReportProcessor(ReportProcessorBase):
 
         data = self._get_data_for_table(row, table_name._meta.db_table)
 
-        data['provider_id'] = self._provider_id
+        data['provider_id'] = self._provider_uuid
 
         bill_id = report_db_accessor.insert_on_conflict_do_nothing(
             table_name,

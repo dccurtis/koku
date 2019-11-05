@@ -30,7 +30,7 @@ from masu.external.downloader.azure.azure_service import AzureCostReportNotFound
 from masu.external.downloader.downloader_interface import DownloaderInterface
 from masu.external.downloader.report_downloader_base import ReportDownloaderBase
 from masu.util.azure import common as utils
-from masu.util.common import extract_uuids_from_string
+from masu.util.common import extract_uuids_from_string, month_date_range
 
 DATA_DIR = Config.TMP_DIR
 LOG = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class AzureReportDownloader(ReportDownloaderBase, DownloaderInterface):
         """
         super().__init__(**kwargs)
 
-        self._provider_id = kwargs.get('provider_id')
+        self._provider_uuid = kwargs.get('provider_uuid')
         self.customer_name = customer_name.replace(' ', '_')
         if not kwargs.get('is_local'):
             self._azure_client = self._get_azure_client(auth_credential, billing_source)
@@ -102,7 +102,7 @@ class AzureReportDownloader(ReportDownloaderBase, DownloaderInterface):
                     example: "/cost/costreport/20190801-20190831"
 
         """
-        report_date_range = utils.month_date_range(date_time)
+        report_date_range = month_date_range(date_time)
         return '{}/{}/{}'.format(self.directory, self.export_name,
                                  report_date_range)
 
@@ -172,13 +172,12 @@ class AzureReportDownloader(ReportDownloaderBase, DownloaderInterface):
 
         if not should_download:
             manifest_id = self._get_existing_manifest_db_id(manifest_dict.get('assembly_id'))
-            stmt = ('This manifest has already been downloaded and processed:\n'
-                    ' customer: {},\n'
-                    ' provider_id: {},\n'
-                    ' manifest_id: {}')
-            stmt = stmt.format(self.customer_name,
-                               self._provider_id,
-                               manifest_id)
+            stmt = (
+                f'This manifest has already been downloaded and processed:\n'
+                f' schema_name: {self.customer_name},\n'
+                f' provider_uuid: {self._provider_uuid},\n'
+                f' manifest_id: {manifest_id}'
+            )
             LOG.info(stmt)
             return report_dict
 

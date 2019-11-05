@@ -19,10 +19,12 @@ from tenant_schemas.utils import tenant_context
 
 from api.functions import JSONBObjectKeys
 from api.iam.test.iam_test_case import IamTestCase
+from api.provider.test import create_generic_provider
 from api.report.test.ocp.helpers import OCPReportDataGenerator
 from api.tags.ocp.queries import OCPTagQueryHandler
+from api.tags.ocp.view import OCPTagView
 from api.utils import DateHelper
-from reporting.models import OCPStorageLineItemDailySummary, OCPUsageLineItemDailySummary
+from reporting.models import OCPUsageLineItemDailySummary
 
 
 class OCPTagQueryHandlerTest(IamTestCase):
@@ -37,18 +39,14 @@ class OCPTagQueryHandlerTest(IamTestCase):
     def setUp(self):
         """Set up the customer view tests."""
         super().setUp()
-        OCPReportDataGenerator(self.tenant).add_data_to_tenant()
+        _, self.provider = create_generic_provider('OCP', self.headers)
+        OCPReportDataGenerator(self.tenant, self.provider).add_data_to_tenant()
 
     def test_execute_query_no_query_parameters(self):
         """Test that the execute query runs properly with no query."""
-        query_params = {}
-        handler = OCPTagQueryHandler(
-            query_params,
-            '',
-            self.tenant,
-            **{}
-        )
-
+        url = '?'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         query_output = handler.execute_query()
         self.assertIsNotNone(query_output.get('data'))
         self.assertEqual(handler.time_scope_units, 'day')
@@ -56,20 +54,9 @@ class OCPTagQueryHandlerTest(IamTestCase):
 
     def test_execute_query_10_day_parameters(self):
         """Test that the execute query runs properly with 10 day query."""
-        query_params = {'filter': {'resolution': 'daily',
-                                   'time_scope_value': -10,
-                                   'time_scope_units': 'day'},
-                        }
-        query_string = '?filter[resolution]=daily&' + \
-                       'filter[time_scope_value]=-10&' + \
-                       'filter[time_scope_units]=day&'
-        handler = OCPTagQueryHandler(
-            query_params,
-            query_string,
-            self.tenant,
-            **{}
-        )
-
+        url = '?filter[time_scope_units]=day&filter[time_scope_value]=-10&filter[resolution]=daily'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         query_output = handler.execute_query()
         self.assertIsNotNone(query_output.get('data'))
         self.assertEqual(handler.time_scope_units, 'day')
@@ -77,20 +64,9 @@ class OCPTagQueryHandlerTest(IamTestCase):
 
     def test_execute_query_30_day_parameters(self):
         """Test that the execute query runs properly with 30 day query."""
-        query_params = {'filter': {'resolution': 'daily',
-                                   'time_scope_value': -30,
-                                   'time_scope_units': 'day'},
-                        }
-        query_string = '?filter[resolution]=daily&' + \
-                       'filter[time_scope_value]=-30&' + \
-                       'filter[time_scope_units]=day&'
-        handler = OCPTagQueryHandler(
-            query_params,
-            query_string,
-            self.tenant,
-            **{}
-        )
-
+        url = '?filter[time_scope_units]=day&filter[time_scope_value]=-30&filter[resolution]=daily'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         query_output = handler.execute_query()
         self.assertIsNotNone(query_output.get('data'))
         self.assertEqual(handler.time_scope_units, 'day')
@@ -98,22 +74,9 @@ class OCPTagQueryHandlerTest(IamTestCase):
 
     def test_execute_query_10_day_parameters_only_keys(self):
         """Test that the execute query runs properly with 10 day query."""
-        query_params = {'filter': {'resolution': 'daily',
-                                   'time_scope_value': -10,
-                                   'time_scope_units': 'day',
-                                   'key_only': True}
-                        }
-        query_string = '?filter[resolution]=daily&' + \
-                       'filter[time_scope_value]=-10&' + \
-                       'filter[time_scope_units]=day&' + \
-                       'key_only=True'
-        handler = OCPTagQueryHandler(
-            query_params,
-            query_string,
-            self.tenant,
-            **{}
-        )
-
+        url = '?filter[time_scope_units]=day&filter[time_scope_value]=-10&filter[resolution]=daily&key_only=True'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         query_output = handler.execute_query()
         self.assertIsNotNone(query_output.get('data'))
         self.assertEqual(handler.time_scope_units, 'day')
@@ -121,20 +84,9 @@ class OCPTagQueryHandlerTest(IamTestCase):
 
     def test_execute_query_month_parameters(self):
         """Test that the execute query runs properly with single month query."""
-        query_params = {'filter': {'resolution': 'monthly',
-                                   'time_scope_value': -1,
-                                   'time_scope_units': 'month'},
-                        }
-        query_string = '?filter[resolution]=monthly&' + \
-                       'filter[time_scope_value]=-1&' + \
-                       'filter[time_scope_units]=month&'
-        handler = OCPTagQueryHandler(
-            query_params,
-            query_string,
-            self.tenant,
-            **{}
-        )
-
+        url = '?filter[time_scope_units]=month&filter[time_scope_value]=-1&filter[resolution]=monthly'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         query_output = handler.execute_query()
         self.assertIsNotNone(query_output.get('data'))
         self.assertEqual(handler.time_scope_units, 'month')
@@ -142,20 +94,9 @@ class OCPTagQueryHandlerTest(IamTestCase):
 
     def test_execute_query_two_month_parameters(self):
         """Test that the execute query runs properly with two month query."""
-        query_params = {'filter': {'resolution': 'monthly',
-                                   'time_scope_value': -2,
-                                   'time_scope_units': 'month'},
-                        }
-        query_string = '?filter[resolution]=monthly&' + \
-                       'filter[time_scope_value]=-2&' + \
-                       'filter[time_scope_units]=month&'
-        handler = OCPTagQueryHandler(
-            query_params,
-            query_string,
-            self.tenant,
-            **{}
-        )
-
+        url = '?filter[time_scope_units]=month&filter[time_scope_value]=-2&filter[resolution]=monthly'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         query_output = handler.execute_query()
         self.assertIsNotNone(query_output.get('data'))
         self.assertEqual(handler.time_scope_units, 'month')
@@ -165,28 +106,14 @@ class OCPTagQueryHandlerTest(IamTestCase):
         """Test that the execute query runs properly with project query."""
         namespace = None
         with tenant_context(self.tenant):
-            namespace_obj = OCPUsageLineItemDailySummary.objects\
-                .values('namespace')\
-                .first()
+            namespace_obj = OCPUsageLineItemDailySummary.objects.values(
+                'namespace'
+            ).first()
             namespace = namespace_obj.get('namespace')
 
-        query_params = {'filter': {'resolution': 'daily',
-                                   'time_scope_value': -10,
-                                   'time_scope_units': 'day',
-                                   'project': namespace},
-                        }
-        query_string = '?filter[resolution]=daily&' + \
-                       'filter[time_scope_value]=-10&' + \
-                       'filter[time_scope_units]=day&' + \
-                       'filter[project]={}'.format(namespace)
-
-        handler = OCPTagQueryHandler(
-            query_params,
-            query_string,
-            self.tenant,
-            **{}
-        )
-
+        url = f'?filter[time_scope_units]=day&filter[time_scope_value]=-10&filter[resolution]=daily&filter[project]={namespace}'  # noqa: E501
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
         query_output = handler.execute_query()
         self.assertIsNotNone(query_output.get('data'))
         self.assertEqual(handler.time_scope_units, 'day')
@@ -194,34 +121,30 @@ class OCPTagQueryHandlerTest(IamTestCase):
 
     def test_get_tag_keys_filter_true(self):
         """Test that not all tag keys are returned with a filter."""
-        query_params = {'filter': {'resolution': 'monthly',
-                                   'time_scope_value': -2,
-                                   'time_scope_units': 'month'},
-                        }
-        query_string = '?filter[resolution]=monthly&' + \
-                       'filter[time_scope_value]=-2&' + \
-                       'filter[time_scope_units]=month&'
-        handler = OCPTagQueryHandler(
-            query_params,
-            query_string,
-            self.tenant,
-            **{}
-        )
+        url = '?filter[time_scope_units]=month&filter[time_scope_value]=-2&filter[resolution]=monthly'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
 
         with tenant_context(self.tenant):
-            usage_tag_keys = OCPUsageLineItemDailySummary.objects\
-                .annotate(tag_keys=JSONBObjectKeys('pod_labels'))\
-                .values('tag_keys')\
-                .distinct()\
+            usage_tag_keys = (
+                OCPUsageLineItemDailySummary.objects.annotate(
+                    tag_keys=JSONBObjectKeys('pod_labels')
+                )
+                .values('tag_keys')
+                .distinct()
                 .all()
+            )
 
             usage_tag_keys = [tag.get('tag_keys') for tag in usage_tag_keys]
 
-            storage_tag_keys = OCPStorageLineItemDailySummary.objects\
-                .annotate(tag_keys=JSONBObjectKeys('volume_labels'))\
-                .values('tag_keys')\
-                .distinct()\
+            storage_tag_keys = (
+                OCPUsageLineItemDailySummary.objects.annotate(
+                    tag_keys=JSONBObjectKeys('volume_labels')
+                )
+                .values('tag_keys')
+                .distinct()
                 .all()
+            )
             storage_tag_keys = [tag.get('tag_keys') for tag in storage_tag_keys]
             tag_keys = list(set(usage_tag_keys + storage_tag_keys))
 
@@ -230,34 +153,30 @@ class OCPTagQueryHandlerTest(IamTestCase):
 
     def test_get_tag_keys_filter_false(self):
         """Test that all tag keys are returned with no filter."""
-        query_params = {'filter': {'resolution': 'monthly',
-                                   'time_scope_value': -2,
-                                   'time_scope_units': 'month'},
-                        }
-        query_string = '?filter[resolution]=monthly&' + \
-                       'filter[time_scope_value]=-2&' + \
-                       'filter[time_scope_units]=month&'
-        handler = OCPTagQueryHandler(
-            query_params,
-            query_string,
-            self.tenant,
-            **{}
-        )
+        url = '?filter[time_scope_units]=month&filter[time_scope_value]=-2&filter[resolution]=monthly'
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
 
         with tenant_context(self.tenant):
-            usage_tag_keys = OCPUsageLineItemDailySummary.objects\
-                .annotate(tag_keys=JSONBObjectKeys('pod_labels'))\
-                .values('tag_keys')\
-                .distinct()\
+            usage_tag_keys = (
+                OCPUsageLineItemDailySummary.objects.annotate(
+                    tag_keys=JSONBObjectKeys('pod_labels')
+                )
+                .values('tag_keys')
+                .distinct()
                 .all()
+            )
 
             usage_tag_keys = [tag.get('tag_keys') for tag in usage_tag_keys]
 
-            storage_tag_keys = OCPStorageLineItemDailySummary.objects\
-                .annotate(tag_keys=JSONBObjectKeys('volume_labels'))\
-                .values('tag_keys')\
-                .distinct()\
+            storage_tag_keys = (
+                OCPUsageLineItemDailySummary.objects.annotate(
+                    tag_keys=JSONBObjectKeys('volume_labels')
+                )
+                .values('tag_keys')
+                .distinct()
                 .all()
+            )
             storage_tag_keys = [tag.get('tag_keys') for tag in storage_tag_keys]
             tag_keys = list(set(usage_tag_keys + storage_tag_keys))
 
@@ -266,28 +185,19 @@ class OCPTagQueryHandlerTest(IamTestCase):
 
     def test_get_tag_type_filter_pod(self):
         """Test that all usage tags are returned with pod type filter."""
-        query_params = {'filter': {'resolution': 'monthly',
-                                   'time_scope_value': -2,
-                                   'time_scope_units': 'month',
-                                   'type': 'pod'},
-                        }
-        query_string = '?filter[resolution]=monthly&' + \
-                       'filter[time_scope_value]=-2&' + \
-                       'filter[time_scope_units]=month&' + \
-                       'filter[type]=pod&'
-        handler = OCPTagQueryHandler(
-            query_params,
-            query_string,
-            self.tenant,
-            **{}
-        )
+        url = '?filter[time_scope_units]=month&filter[time_scope_value]=-2&filter[resolution]=monthly&filter[type]=pod'  # noqa: E501
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
 
         with tenant_context(self.tenant):
-            usage_tag_keys = OCPUsageLineItemDailySummary.objects\
-                .annotate(tag_keys=JSONBObjectKeys('pod_labels'))\
-                .values('tag_keys')\
-                .distinct()\
+            usage_tag_keys = (
+                OCPUsageLineItemDailySummary.objects.annotate(
+                    tag_keys=JSONBObjectKeys('pod_labels')
+                )
+                .values('tag_keys')
+                .distinct()
                 .all()
+            )
 
             usage_tag_keys = [tag.get('tag_keys') for tag in usage_tag_keys]
             tag_keys = usage_tag_keys
@@ -297,28 +207,19 @@ class OCPTagQueryHandlerTest(IamTestCase):
 
     def test_get_tag_type_filter_storage(self):
         """Test that all storage tags are returned with storage type filter."""
-        query_params = {'filter': {'resolution': 'monthly',
-                                   'time_scope_value': -2,
-                                   'time_scope_units': 'month',
-                                   'type': 'storage'},
-                        }
-        query_string = '?filter[resolution]=monthly&' + \
-                       'filter[time_scope_value]=-2&' + \
-                       'filter[time_scope_units]=month&' + \
-                       'filter[type]=storage&'
-        handler = OCPTagQueryHandler(
-            query_params,
-            query_string,
-            self.tenant,
-            **{}
-        )
+        url = '?filter[time_scope_units]=month&filter[time_scope_value]=-2&filter[resolution]=monthly&filter[type]=storage'  # noqa: E501
+        query_params = self.mocked_query_params(url, OCPTagView)
+        handler = OCPTagQueryHandler(query_params)
 
         with tenant_context(self.tenant):
-            storage_tag_keys = OCPStorageLineItemDailySummary.objects\
-                .annotate(tag_keys=JSONBObjectKeys('volume_labels'))\
-                .values('tag_keys')\
-                .distinct()\
+            storage_tag_keys = (
+                OCPUsageLineItemDailySummary.objects.annotate(
+                    tag_keys=JSONBObjectKeys('volume_labels')
+                )
+                .values('tag_keys')
+                .distinct()
                 .all()
+            )
             storage_tag_keys = [tag.get('tag_keys') for tag in storage_tag_keys]
             tag_keys = storage_tag_keys
 

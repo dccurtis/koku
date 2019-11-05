@@ -61,30 +61,24 @@ def _get_report_files(customer_name,
     """
     with ProviderDBAccessor(provider_uuid=provider_uuid) as provider_accessor:
         reports_processed = provider_accessor.get_setup_complete()
-        provider_id = provider_accessor.get_provider().id
+        provider_uuid = provider_accessor.get_provider().uuid
 
     if Config.INGEST_OVERRIDE or not reports_processed:
         number_of_months = Config.INITIAL_INGEST_NUM_MONTHS
     else:
         number_of_months = 2
 
-    stmt = ('Downloading report for'
-            ' credential: {},'
-            ' source: {},'
-            ' customer_name: {},'
-            ' provider: {},'
-            ' number_of_months: {}')
-    log_statement = stmt.format(str(authentication),
-                                str(billing_source),
-                                customer_name,
-                                provider_type,
-                                number_of_months)
+    log_statement = (f'Downloading report for:\n'
+                     f' schema_name: {customer_name}\n'
+                     f' provider: {provider_type}\n'
+                     f' account (provider uuid): {provider_uuid}\n'
+                     f' number_of_months: {number_of_months}')
     LOG.info(log_statement)
     try:
-        disk = psutil.disk_usage(Config.TMP_DIR)
-        disk_msg = 'Available disk space: {} bytes ({}%)'.format(disk.free, 100 - disk.percent)
+        disk = psutil.disk_usage(Config.PVC_DIR)
+        disk_msg = f'Available disk space: {disk.free} bytes ({100 - disk.percent}%)'
     except OSError:
-        disk_msg = 'Unable to find available disk space. {} does not exist'.format(Config.TMP_DIR)
+        disk_msg = f'Unable to find available disk space. {Config.PVC_DIR} does not exist'
     LOG.info(disk_msg)
 
     reports = None
@@ -93,7 +87,7 @@ def _get_report_files(customer_name,
                                       access_credential=authentication,
                                       report_source=billing_source,
                                       provider_type=provider_type,
-                                      provider_id=provider_id,
+                                      provider_uuid=provider_uuid,
                                       report_name=report_name)
         reports = downloader.get_reports(number_of_months)
     except (MasuProcessingError, MasuProviderError, ReportDownloaderError) as err:

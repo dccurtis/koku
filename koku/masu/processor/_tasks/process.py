@@ -48,21 +48,17 @@ def _process_report_file(schema_name, provider, provider_uuid, report_dict):
     report_path = report_dict.get('file')
     compression = report_dict.get('compression')
     manifest_id = report_dict.get('manifest_id')
-    provider_id = report_dict.get('provider_id')
-    stmt = ('Processing Report:'
-            ' schema_name: {},'
-            ' report_path: {},'
-            ' compression: {},'
-            ' provider: {},'
-            ' start_date: {}')
-    log_statement = stmt.format(schema_name,
-                                report_path,
-                                compression,
-                                provider,
-                                start_date)
+    provider_uuid = report_dict.get('provider_uuid')
+    log_statement = (f'Processing Report:\n'
+                     f' schema_name: {schema_name}\n'
+                     f' provider: {provider}\n'
+                     f' provider_uuid: {provider_uuid}\n'
+                     f' file: {report_path}\n'
+                     f' compression: {compression}\n'
+                     f' start_date: {start_date}')
     LOG.info(log_statement)
     mem = psutil.virtual_memory()
-    mem_msg = 'Avaiable memory: {} bytes ({}%)'.format(mem.free, mem.percent)
+    mem_msg = f'Avaiable memory: {mem.free} bytes ({mem.percent}%)'
     LOG.info(mem_msg)
 
     file_name = report_path.split('/')[-1]
@@ -72,7 +68,7 @@ def _process_report_file(schema_name, provider, provider_uuid, report_dict):
                                 report_path=report_path,
                                 compression=compression,
                                 provider=provider,
-                                provider_id=provider_id,
+                                provider_uuid=provider_uuid,
                                 manifest_id=manifest_id)
     processor.process()
     with ReportStatsDBAccessor(file_name, manifest_id) as stats_recorder:
@@ -88,7 +84,7 @@ def _process_report_file(schema_name, provider, provider_uuid, report_dict):
             LOG.error('Unable to find manifest for ID: %s, file %s', manifest_id, file_name)
 
     with ProviderDBAccessor(provider_uuid=provider_uuid) as provider_accessor:
+        if provider_accessor.get_setup_complete():
+            files = processor.remove_processed_files(path.dirname(report_path))
+            LOG.info('Temporary files removed: %s', str(files))
         provider_accessor.setup_complete()
-
-    files = processor.remove_processed_files(path.dirname(report_path))
-    LOG.info('Temporary files removed: %s', str(files))

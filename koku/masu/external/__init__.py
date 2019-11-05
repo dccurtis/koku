@@ -19,9 +19,11 @@
 # Provider Types
 AMAZON_WEB_SERVICES = 'AWS'
 AZURE = 'AZURE'
+GCP = 'GCP'
 OPENSHIFT_CONTAINER_PLATFORM = 'OCP'
 AWS_LOCAL_SERVICE_PROVIDER = 'AWS-local'
 AZURE_LOCAL_SERVICE_PROVIDER = 'AZURE-local'
+GCP_LOCAL = 'GCP-local'
 
 # Ingest Methods
 POLL_INGEST = 'poll-ingest'
@@ -30,10 +32,6 @@ LISTEN_INGEST = 'listen-ingest'
 # Compression formats
 UNCOMPRESSED = 'PLAIN'
 GZIP_COMPRESSED = 'GZIP'
-
-# Notificaton Definitions
-AWS_SNS_HEADER_MSG_TYPE = 'X-Amz-Sns-Message-Type'
-AWS_SNS_HEADER_TOPIC_ARN = 'X-Amz-Sns-Topic-Arn'
 
 # Valid AWS Regions from https://docs.aws.amazon.com/general/latest/gr/rande.html
 AWS_REGIONS = ['us-east-2',

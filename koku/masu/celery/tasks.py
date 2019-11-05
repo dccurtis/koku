@@ -21,16 +21,18 @@
 # we expect this situation to be temporary as we iterate on these details.
 import calendar
 import collections
+import uuid
 from datetime import date
 
 from botocore.exceptions import ClientError
+from celery.exceptions import MaxRetriesExceededError
 from celery.utils.log import get_task_logger
 from dateutil.relativedelta import relativedelta
 from django.conf import settings
 
 from api.dataexport.models import DataExportRequest
-from api.dataexport.syncer import AwsS3Syncer
-from koku.celery import CELERY as celery
+from api.dataexport.syncer import AwsS3Syncer, SyncedFileInColdStorageError
+from koku.celery import app
 from masu.external.date_accessor import DateAccessor
 from masu.processor.orchestrator import Orchestrator
 from masu.util.upload import query_and_upload_to_s3
@@ -38,14 +40,14 @@ from masu.util.upload import query_and_upload_to_s3
 LOG = get_task_logger(__name__)
 
 
-@celery.task(name='masu.celery.tasks.check_report_updates')
+@app.task(name='masu.celery.tasks.check_report_updates')
 def check_report_updates():
     """Scheduled task to initiate scanning process on a regular interval."""
     orchestrator = Orchestrator()
     orchestrator.prepare()
 
 
-@celery.task(name='masu.celery.tasks.remove_expired_data')
+@app.task(name='masu.celery.tasks.remove_expired_data')
 def remove_expired_data():
     """Scheduled task to initiate a job to remove expired report data."""
     today = DateAccessor().today()
@@ -137,11 +139,13 @@ table_export_settings = [
         'reporting_awscostentrylineitem_daily_summary',
         True,
         """
-        SELECT ds.*, a.account_id, a.account_alias, b.*
+        SELECT ds.*, aa.account_id, aa.account_alias, b.*
         FROM
             {schema}.reporting_awscostentrylineitem_daily_summary ds
-            JOIN {schema}.reporting_awsaccountalias a ON a.id = ds.account_alias_id
             JOIN {schema}.reporting_awscostentrybill b ON b.id = ds.cost_entry_bill_id
+            LEFT JOIN {schema}.reporting_awsaccountalias aa ON aa.id = ds.account_alias_id
+            -- LEFT JOIN because sometimes this doesn't exist, but it's unclear why.
+            -- It seems that "real" data has it, but fake data from AWS-local+nise does not.
         WHERE ds.usage_start BETWEEN %(start_date)s AND %(end_date)s
             -- No need to filter usage_end because usage_end should always match usage_start for this table.
         """,
@@ -156,7 +160,7 @@ table_export_settings = [
             {schema}.reporting_azurecostentrylineitem_daily_summary ds
             JOIN {schema}.reporting_azurecostentrybill b ON b.id = ds.cost_entry_bill_id
             JOIN {schema}.reporting_azuremeter m ON m.id = ds.meter_id
-        WHERE ds.usage_date_time BETWEEN %(start_date)s AND %(end_date)s
+        WHERE ds.usage_start BETWEEN %(start_date)s AND %(end_date)s
         """,
     ),
     TableExportSetting(
@@ -164,11 +168,13 @@ table_export_settings = [
         'reporting_ocpawscostlineitem_daily_summary',
         True,
         """
-        SELECT ds.*, a.account_id, aa.account_alias, b.*
+        SELECT ds.*, aa.account_id, aa.account_alias, b.*
         FROM
             {schema}.reporting_ocpawscostlineitem_daily_summary ds
-            JOIN {schema}.reporting_awsaccountalias aa ON aa.id = ds.account_alias_id
             JOIN {schema}.reporting_awscostentrybill b ON b.id = ds.account_alias_id
+            LEFT JOIN {schema}.reporting_awsaccountalias aa ON aa.id = ds.account_alias_id
+            -- LEFT JOIN because sometimes this doesn't exist, but it's unclear why.
+            -- It seems that "real" data has it, but fake data from AWS-local+nise does not.
         WHERE ds.usage_start BETWEEN %(start_date)s AND %(end_date)s
             -- No need to filter usage_end because usage_end should always match usage_start for this table.
         """,
@@ -181,19 +187,10 @@ table_export_settings = [
         SELECT ds.*, aa.account_id, aa.account_alias, b.*
         FROM
             {schema}.reporting_ocpawscostlineitem_project_daily_summary ds
-            JOIN {schema}.reporting_awsaccountalias aa ON aa.id = ds.account_alias_id
             JOIN {schema}.reporting_awscostentrybill b ON b.id = ds.account_alias_id
-        WHERE ds.usage_start BETWEEN %(start_date)s AND %(end_date)s
-            -- No need to filter usage_end because usage_end should always match usage_start for this table.
-        """,
-    ),
-    TableExportSetting(
-        'ocp',
-        'reporting_ocpstoragelineitem_daily_summary',
-        True,
-        """
-        SELECT ds.*
-        FROM {schema}.reporting_ocpstoragelineitem_daily_summary ds
+            LEFT JOIN {schema}.reporting_awsaccountalias aa ON aa.id = ds.account_alias_id
+            -- LEFT JOIN because sometimes this doesn't exist, but it's unclear why.
+            -- It seems that "real" data has it, but fake data from AWS-local+nise does not.
         WHERE ds.usage_start BETWEEN %(start_date)s AND %(end_date)s
             -- No need to filter usage_end because usage_end should always match usage_start for this table.
         """,
@@ -212,9 +209,11 @@ table_export_settings = [
 ]
 
 
-@celery.task(name='masu.celery.tasks.upload_normalized_data', queue_name='upload')
+@app.task(name='masu.celery.tasks.upload_normalized_data', queue_name='upload')
 def upload_normalized_data():
     """Scheduled task to export normalized data to s3."""
+    log_uuid = str(uuid.uuid4())
+    LOG.info('%s Beginning upload_normalized_data', log_uuid)
     curr_date = DateAccessor().today()
     curr_month_range = calendar.monthrange(curr_date.year, curr_date.month)
     curr_month_first_day = date(year=curr_date.year, month=curr_date.month, day=1)
@@ -231,17 +230,30 @@ def upload_normalized_data():
     # Deduplicate schema_name since accounts may have the same schema_name but different providers
     schemas = set(account['schema_name'] for account in accounts)
     for schema in schemas:
+        LOG.info('%s processing schema %s', log_uuid, schema)
         for table in table_export_settings:
             # Upload this month's reports
             query_and_upload_to_s3(schema, table, (curr_month_first_day, curr_month_last_day))
 
             # Upload last month's reports
             query_and_upload_to_s3(schema, table, (prev_month_first_day, prev_month_last_day))
+    LOG.info('%s Completed upload_normalized_data', log_uuid)
 
 
-@celery.task(name='masu.celery.tasks.sync_data_to_customer', queue_name='customer_data_sync')
+@app.task(name='masu.celery.tasks.sync_data_to_customer',
+          queue_name='customer_data_sync',
+          retry_kwargs={'max_retries': 5,
+                        'countdown': settings.COLD_STORAGE_RETRIVAL_WAIT_TIME})
 def sync_data_to_customer(dump_request_uuid):
-    """Scheduled task to sync normalized data to our customers S3 bucket."""
+    """
+    Scheduled task to sync normalized data to our customers S3 bucket.
+
+    If the sync request raises SyncedFileInColdStorageError, this task
+    will automatically retry in a set amount of time. This time is to give
+    the storage solution time to retrieve a file from cold storage.
+    This task will retry 5 times, and then fail.
+
+    """
     dump_request = DataExportRequest.objects.get(uuid=dump_request_uuid)
     dump_request.status = DataExportRequest.PROCESSING
     dump_request.save()
@@ -259,6 +271,20 @@ def sync_data_to_customer(dump_request_uuid):
         dump_request.status = DataExportRequest.ERROR
         dump_request.save()
         return
-
+    except SyncedFileInColdStorageError:
+        LOG.info(
+            f'One of the requested files is currently in cold storage for '
+            f'DataExportRequest {dump_request.uuid}. This task will automatically retry.')
+        dump_request.status = DataExportRequest.WAITING
+        dump_request.save()
+        try:
+            raise sync_data_to_customer.retry(countdown=10, max_retries=5)
+        except MaxRetriesExceededError:
+            LOG.exception(
+                f'Max retires exceeded for restoring a file in cold storage for '
+                f'DataExportRequest {dump_request.uuid}, for {dump_request.created_by}.')
+            dump_request.status = DataExportRequest.ERROR
+            dump_request.save()
+            return
     dump_request.status = DataExportRequest.COMPLETE
     dump_request.save()

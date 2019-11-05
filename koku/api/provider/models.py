@@ -51,13 +51,7 @@ class ProviderAuthentication(models.Model):
                 check=~models.Q(models.Q(provider_resource_name=None) \
                                 & models.Q(credentials={})),
                 name='credentials_and_resource_name_both_null'
-            ),
-            # NOT (provider_resource_name IS NOT NULL AND credentials IS NOT NULL)
-            CheckConstraint(
-                check=~models.Q(~models.Q(provider_resource_name=None) \
-                                & ~models.Q(credentials={})),
-                name='credentials_and_resource_name_both_not_null'
-            ),
+            )
         ]
 
 
@@ -87,13 +81,7 @@ class ProviderBillingSource(models.Model):
                 check=~models.Q(models.Q(bucket=None) \
                                 & models.Q(data_source={})),
                 name='bucket_and_data_source_both_null'
-            ),
-            # NOT (bucket IS NOT NULL or '' AND data_source IS NOT NULL)
-            CheckConstraint(
-                check=~models.Q(~(models.Q(bucket=None) | models.Q(bucket='')) \
-                                & ~models.Q(data_source={})),
-                name='bucket_and_data_source_both_not_null'
-            ),
+            )
         ]
 
 
@@ -132,8 +120,7 @@ class Provider(models.Model):
                             (PROVIDER_AZURE, PROVIDER_AZURE),
                             (PROVIDER_GCP, PROVIDER_GCP))
 
-    uuid = models.UUIDField(default=uuid4, editable=False,
-                            unique=True, null=False)
+    uuid = models.UUIDField(default=uuid4, primary_key=True)
     name = models.CharField(max_length=256, null=False)
     type = models.CharField(max_length=50, null=False,
                             choices=PROVIDER_CHOICES, default=PROVIDER_AWS)
@@ -147,6 +134,7 @@ class Provider(models.Model):
                                    on_delete=models.SET_NULL)
     setup_complete = models.BooleanField(default=False)
     created_timestamp = models.DateTimeField(auto_now_add=True, blank=True, null=True)
+    active = models.BooleanField(default=False)
 
 
 class Sources(models.Model):
@@ -173,6 +161,9 @@ class Sources(models.Model):
     # Kafka message offset for Platform-Sources kafka stream
     offset = models.IntegerField(null=False)
 
+    # Endpoint ID.  Identifier to connect source to authentication.
+    endpoint_id = models.IntegerField(null=True)
+
     # Koku Specific data.
     # Provider type (i.e. AWS, OCP, AZURE)
     source_type = models.CharField(max_length=50, null=False)
@@ -190,6 +181,11 @@ class Sources(models.Model):
     # removed on the Koku side yet.  Entry is removed entirely once Koku-Provider was successfully
     # removed.
     pending_delete = models.BooleanField(default=False)
+
+    # When a source is being updated by either Platform-Sources or from API (auth, billing source)
+    # this flag will indicate that the update needs to be picked up by the Koku-Provider synchronization
+    # handler.
+    pending_update = models.BooleanField(default=False)
 
 
 class ProviderStatus(models.Model):
@@ -210,8 +206,7 @@ class ProviderStatus(models.Model):
               (98, 'Disabled: Error'),
               (99, 'Disabled: Admin'),)
 
-    provider = models.ForeignKey('Provider', null=False,
-                                 on_delete=models.CASCADE, blank=False)
+    provider = models.ForeignKey('Provider', on_delete=models.CASCADE)
     status = models.IntegerField(null=False,
                                  choices=STATES,
                                  default=0)

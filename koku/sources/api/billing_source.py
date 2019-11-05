@@ -36,10 +36,10 @@ def billing_source(request):
     """Create billing source for AWS and Azure sources."""
     request_data = request.data
     try:
-        add_provider_billing_source(request_data.get('source_id'), request_data.get('billing_source'))
+        add_provider_billing_source(request_data, request_data.get('billing_source'))
         response = request_data
         status_code = status.HTTP_201_CREATED
     except SourcesStorageError as error:
         response = str(error)
         status_code = status.HTTP_400_BAD_REQUEST
-    return Response({'Billing source creation:': response}, status=status_code)
+    return Response(response, status=status_code)

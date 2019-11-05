@@ -89,10 +89,10 @@ def extract_payload(url):
     # Create temporary directory for initial file staging and verification in the
     # OpenShift PVC directory so that any failures can be triaged in the event
     # the pod goes down.
-    os.makedirs(Config.TMP_DIR, exist_ok=True)
-    temp_dir = tempfile.mkdtemp(dir=Config.TMP_DIR)
+    os.makedirs(Config.PVC_DIR, exist_ok=True)
+    temp_dir = tempfile.mkdtemp(dir=Config.PVC_DIR)
 
-    # Download file from quarntine bucket as tar.gz
+    # Download file from quarantine bucket as tar.gz
     try:
         download_response = requests.get(url)
         download_response.raise_for_status()
@@ -115,7 +115,7 @@ def extract_payload(url):
         mytar.extractall(path=temp_dir)
         files = mytar.getnames()
         manifest_path = [manifest for manifest in files if 'manifest.json' in manifest]
-    except ReadError as error:
+    except (ReadError, EOFError) as error:
         LOG.error('Unable to untar file. Reason: %s', str(error))
         shutil.rmtree(temp_dir)
         raise KafkaMsgHandlerError('Extraction failure.')
@@ -231,6 +231,7 @@ def handle_message(msg):
     if msg.topic == HCCM_TOPIC:
         value = json.loads(msg.value.decode('utf-8'))
         try:
+            LOG.info(f'Extracting Payload for msg: {str(msg)}')
             report_meta = extract_payload(value['url'])
             return SUCCESS_CONFIRM_STATUS, report_meta
         except KafkaMsgHandlerError as error:
@@ -265,7 +266,7 @@ def get_account(provider_uuid):
         LOG.info('Unable to get accounts. Error: %s', str(error))
         return None
 
-    return all_accounts.pop()
+    return all_accounts.pop() if all_accounts else None
 
 
 def process_report(report):
@@ -289,13 +290,13 @@ def process_report(report):
     if provider_uuid:
         LOG.info('Found provider_uuid: %s for cluster_id: %s', str(provider_uuid), str(cluster_id))
         account = get_account(provider_uuid)
-        LOG.info('Processing report for account %s', account)
+        if account:
+            LOG.info('Processing report for account %s', account)
+            reports_to_summarize = get_report_files(**account)
+            LOG.info('Processing complete for account %s', account)
 
-        reports_to_summarize = get_report_files(**account)
-        LOG.info('Processing complete for account %s', account)
-
-        async_id = summarize_reports.delay(reports_to_summarize)
-        LOG.info('Summarization celery uuid: %s', str(async_id))
+            async_id = summarize_reports.delay(reports_to_summarize)
+            LOG.info('Summarization celery uuid: %s', str(async_id))
     else:
         LOG.error('Could not find provider_uuid for cluster_id: %s', str(cluster_id))
 

@@ -1,5 +1,5 @@
--- The Python string variable subsitutions {aws_where_clause} and
--- {ocp_where_clause} optionally filter AWS and OCP data by provider/source
+-- The Python Jinja string variable subsitutions aws_where_clause and ocp_where_clause
+-- optionally filter AWS and OCP data by provider/source
 -- Ex aws_where_clause: 'AND cost_entry_bill_id IN (1, 2, 3)'
 -- Ex ocp_where_clause: "AND cluster_id = 'abcd-1234`"
 
@@ -10,11 +10,18 @@ CREATE TEMPORARY TABLE reporting_aws_tags AS (
     SELECT aws.*,
         LOWER(key) as key,
         LOWER(value) as value
-        FROM {schema}.reporting_awscostentrylineitem_daily as aws,
+        FROM {{schema | sqlsafe}}.reporting_awscostentrylineitem_daily as aws,
             jsonb_each_text(aws.tags) labels
-        WHERE date(aws.usage_start) >= '{start_date}'
-            AND date(aws.usage_start) <= '{end_date}'
-            {aws_where_clause}
+        WHERE date(aws.usage_start) >= {{start_date}}
+            AND date(aws.usage_start) <= {{end_date}}
+            --aws_where_clause
+            {% if bill_ids %}
+            AND cost_entry_bill_id IN (
+                {%- for bill_id in bill_ids -%}
+                {{bill_id}}{% if not loop.last %},{% endif %}
+                {%- endfor -%}
+            )
+            {% endif %}
 )
 ;
 
@@ -25,22 +32,28 @@ CREATE TEMPORARY TABLE reporting_ocp_storage_tags AS (
     SELECT ocp.*,
         LOWER(key) as key,
         LOWER(value) as value
-    FROM {schema}.reporting_ocpstoragelineitem_daily as ocp,
+    FROM {{schema | sqlsafe}}.reporting_ocpstoragelineitem_daily as ocp,
         jsonb_each_text(ocp.persistentvolume_labels) labels
-    WHERE date(ocp.usage_start) >= '{start_date}'
-        AND date(ocp.usage_start) <= '{end_date}'
-        {ocp_where_clause}
+    WHERE date(ocp.usage_start) >= {{start_date}}
+        AND date(ocp.usage_start) <= {{end_date}}
+        --ocp_where_clause
+        {% if cluster_id %}
+        AND cluster_id = {{cluster_id}}
+        {% endif %}
 
     UNION ALL
 
     SELECT ocp.*,
         LOWER(key) as key,
         LOWER(value) as value
-    FROM {schema}.reporting_ocpstoragelineitem_daily as ocp,
+    FROM {{schema | sqlsafe}}.reporting_ocpstoragelineitem_daily as ocp,
         jsonb_each_text(ocp.persistentvolumeclaim_labels) labels
-    WHERE date(ocp.usage_start) >= '{start_date}'
-        AND date(ocp.usage_start) <= '{end_date}'
-        {ocp_where_clause}
+    WHERE date(ocp.usage_start) >= {{start_date}}
+        AND date(ocp.usage_start) <= {{end_date}}
+        --ocp_where_clause
+        {% if cluster_id %}
+        AND cluster_id = {{cluster_id}}
+        {% endif %}
 )
 ;
 
@@ -51,11 +64,14 @@ CREATE TEMPORARY TABLE reporting_ocp_pod_tags AS (
     SELECT ocp.*,
         LOWER(key) as key,
         LOWER(value) as value
-    FROM {schema}.reporting_ocpusagelineitem_daily as ocp,
+    FROM {{schema | sqlsafe}}.reporting_ocpusagelineitem_daily as ocp,
         jsonb_each_text(ocp.pod_labels) labels
-    WHERE date(ocp.usage_start) >= '{start_date}'
-        AND date(ocp.usage_start) <= '{end_date}'
-        {ocp_where_clause}
+    WHERE date(ocp.usage_start) >= {{start_date}}
+        AND date(ocp.usage_start) <= {{end_date}}
+        --ocp_where_clause
+        {% if cluster_id %}
+        AND cluster_id = {{cluster_id}}
+        {% endif %}
 )
 ;
 
@@ -64,6 +80,7 @@ CREATE TEMPORARY TABLE reporting_ocp_pod_tags AS (
 CREATE TEMPORARY TABLE reporting_ocp_aws_resource_id_matched AS (
     WITH cte_resource_id_matched AS (
         SELECT ocp.id AS ocp_id,
+            ocp.report_period_id,
             ocp.cluster_id,
             ocp.cluster_alias,
             ocp.namespace,
@@ -107,14 +124,24 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_resource_id_matched AS (
             aws.public_on_demand_rate,
             aws.tax_type,
             aws.tags
-        FROM {schema}.reporting_awscostentrylineitem_daily as aws
-        JOIN {schema}.reporting_ocpusagelineitem_daily as ocp
+        FROM {{schema | sqlsafe}}.reporting_awscostentrylineitem_daily as aws
+        JOIN {{schema | sqlsafe}}.reporting_ocpusagelineitem_daily as ocp
             ON aws.resource_id = ocp.resource_id
                 AND aws.usage_start::date = ocp.usage_start::date
-        WHERE date(aws.usage_start) >= '{start_date}'
-            AND date(aws.usage_start) <= '{end_date}'
-            {aws_where_clause}
-            {ocp_where_clause}
+        WHERE date(aws.usage_start) >= {{start_date}}
+            AND date(aws.usage_start) <= {{end_date}}
+            -- aws_where_clause
+            {% if bill_ids %}
+            AND cost_entry_bill_id IN (
+                {%- for bill_id in bill_ids -%}
+                {{bill_id}}{% if not loop.last %},{% endif %}
+                {%- endfor -%}
+            )
+            {% endif %}
+            --ocp_where_clause
+            {% if cluster_id %}
+            AND cluster_id = {{cluster_id}}
+            {% endif %}
     ),
     cte_number_of_shared_projects AS (
         SELECT aws_id,
@@ -146,6 +173,7 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_resource_id_matched AS (
 CREATE TEMPORARY TABLE reporting_ocp_aws_direct_tag_matched AS (
     WITH cte_tag_matched AS (
         SELECT ocp.id AS ocp_id,
+            ocp.report_period_id,
             ocp.cluster_id,
             ocp.cluster_alias,
             ocp.namespace,
@@ -196,8 +224,8 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_direct_tag_matched AS (
                 AND aws.usage_start::date = ocp.usage_start::date
         LEFT JOIN reporting_ocp_aws_resource_id_matched AS rm
             ON rm.aws_id = aws.id
-        WHERE date(aws.usage_start) >= '{start_date}'
-            AND date(aws.usage_start) <= '{end_date}'
+        WHERE date(aws.usage_start) >= {{start_date}}
+            AND date(aws.usage_start) <= {{end_date}}
             AND rm.aws_id IS NULL
     ),
     cte_number_of_shared_projects AS (
@@ -229,6 +257,7 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_direct_tag_matched AS (
 CREATE TEMPORARY TABLE reporting_ocp_aws_openshift_project_tag_matched AS (
     WITH cte_tag_matched AS (
         SELECT ocp.id AS ocp_id,
+            ocp.report_period_id,
             ocp.cluster_id,
             ocp.cluster_alias,
             ocp.namespace,
@@ -280,8 +309,8 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_openshift_project_tag_matched AS (
             ON rm.aws_id = aws.id
         LEFT JOIN reporting_ocp_aws_direct_tag_matched AS dtm
             ON dtm.aws_id = aws.id
-        WHERE date(aws.usage_start) >= '{start_date}'
-            AND date(aws.usage_start) <= '{end_date}'
+        WHERE date(aws.usage_start) >= {{start_date}}
+            AND date(aws.usage_start) <= {{end_date}}
             AND rm.aws_id IS NULL
             AND dtm.aws_id IS NULL
 
@@ -315,6 +344,7 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_openshift_project_tag_matched AS (
 CREATE TEMPORARY TABLE reporting_ocp_aws_openshift_node_tag_matched AS (
     WITH cte_tag_matched AS (
         SELECT ocp.id AS ocp_id,
+            ocp.report_period_id,
             ocp.cluster_id,
             ocp.cluster_alias,
             ocp.namespace,
@@ -369,8 +399,8 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_openshift_node_tag_matched AS (
             ON dtm.aws_id = aws.id
         LEFT JOIN reporting_ocp_aws_openshift_project_tag_matched as ptm
             ON ptm.aws_id = aws.id
-        WHERE date(aws.usage_start) >= '{start_date}'
-            AND date(aws.usage_start) <= '{end_date}'
+        WHERE date(aws.usage_start) >= {{start_date}}
+            AND date(aws.usage_start) <= {{end_date}}
             AND rm.aws_id IS NULL
             AND dtm.aws_id IS NULL
             AND ptm.aws_id IS NULL
@@ -404,6 +434,7 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_openshift_node_tag_matched AS (
 CREATE TEMPORARY TABLE reporting_ocp_aws_openshift_cluster_tag_matched AS (
     WITH cte_tag_matched AS (
         SELECT ocp.id AS ocp_id,
+            ocp.report_period_id,
             ocp.cluster_id,
             ocp.cluster_alias,
             ocp.namespace,
@@ -461,8 +492,8 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_openshift_cluster_tag_matched AS (
             ON ptm.aws_id = aws.id
         LEFT JOIN reporting_ocp_aws_openshift_node_tag_matched as ntm
             ON ntm.aws_id = aws.id
-        WHERE date(aws.usage_start) >= '{start_date}'
-            AND date(aws.usage_start) <= '{end_date}'
+        WHERE date(aws.usage_start) >= {{start_date}}
+            AND date(aws.usage_start) <= {{end_date}}
             AND rm.aws_id IS NULL
             AND dtm.aws_id IS NULL
             AND ptm.aws_id IS NULL
@@ -494,7 +525,7 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_openshift_cluster_tag_matched AS (
 
 -- We UNION the various matches into a table holding all of the
 -- OpenShift pod data matches for easier use.
-CREATE TEMPORARY TABLE reporting_ocpawsusagelineitem_daily_{uuid} AS (
+CREATE TEMPORARY TABLE reporting_ocpawsusagelineitem_daily_{{uuid | sqlsafe}} AS (
     SELECT *
     FROM reporting_ocp_aws_resource_id_matched
 
@@ -524,6 +555,7 @@ CREATE TEMPORARY TABLE reporting_ocpawsusagelineitem_daily_{uuid} AS (
 CREATE TEMPORARY TABLE reporting_ocp_aws_storage_direct_tag_matched AS (
     WITH cte_tag_matched AS (
         SELECT ocp.id AS ocp_id,
+            ocp.report_period_id,
             ocp.cluster_id,
             ocp.cluster_alias,
             ocp.namespace,
@@ -569,8 +601,8 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_storage_direct_tag_matched AS (
             ON aws.key = ocp.key
                 AND aws.value = ocp.value
                 AND aws.usage_start::date = ocp.usage_start::date
-        WHERE date(aws.usage_start) >= '{start_date}'
-            AND date(aws.usage_start) <= '{end_date}'
+        WHERE date(aws.usage_start) >= {{start_date}}
+            AND date(aws.usage_start) <= {{end_date}}
     ),
     cte_number_of_shared_projects AS (
         SELECT aws_id,
@@ -601,6 +633,7 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_storage_direct_tag_matched AS (
 CREATE TEMPORARY TABLE reporting_ocp_aws_storage_openshift_project_tag_matched AS (
     WITH cte_tag_matched AS (
         SELECT ocp.id AS ocp_id,
+            ocp.report_period_id,
             ocp.cluster_id,
             ocp.cluster_alias,
             ocp.namespace,
@@ -647,8 +680,8 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_storage_openshift_project_tag_matched A
                 AND aws.usage_start::date = ocp.usage_start::date
         LEFT JOIN reporting_ocp_aws_storage_direct_tag_matched AS dtm
             ON dtm.aws_id = aws.id
-        WHERE date(aws.usage_start) >= '{start_date}'
-            AND date(aws.usage_start) <= '{end_date}'
+        WHERE date(aws.usage_start) >= {{start_date}}
+            AND date(aws.usage_start) <= {{end_date}}
             AND dtm.aws_id IS NULL
 
     ),
@@ -681,6 +714,7 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_storage_openshift_project_tag_matched A
 CREATE TEMPORARY TABLE reporting_ocp_aws_storage_openshift_node_tag_matched AS (
     WITH cte_tag_matched AS (
         SELECT ocp.id AS ocp_id,
+            ocp.report_period_id,
             ocp.cluster_id,
             ocp.cluster_alias,
             ocp.namespace,
@@ -730,8 +764,8 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_storage_openshift_node_tag_matched AS (
             ON dtm.aws_id = aws.id
         LEFT JOIN reporting_ocp_aws_storage_openshift_project_tag_matched as ptm
             ON ptm.aws_id = aws.id
-        WHERE date(aws.usage_start) >= '{start_date}'
-            AND date(aws.usage_start) <= '{end_date}'
+        WHERE date(aws.usage_start) >= {{start_date}}
+            AND date(aws.usage_start) <= {{end_date}}
             AND dtm.aws_id IS NULL
             AND ptm.aws_id IS NULL
     ),
@@ -764,6 +798,7 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_storage_openshift_node_tag_matched AS (
 CREATE TEMPORARY TABLE reporting_ocp_aws_storage_openshift_cluster_tag_matched AS (
     WITH cte_tag_matched AS (
         SELECT ocp.id AS ocp_id,
+            ocp.report_period_id,
             ocp.cluster_id,
             ocp.cluster_alias,
             ocp.namespace,
@@ -816,8 +851,8 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_storage_openshift_cluster_tag_matched A
             ON ptm.aws_id = aws.id
         LEFT JOIN reporting_ocp_aws_storage_openshift_node_tag_matched as ntm
             ON ntm.aws_id = aws.id
-        WHERE date(aws.usage_start) >= '{start_date}'
-            AND date(aws.usage_start) <= '{end_date}'
+        WHERE date(aws.usage_start) >= {{start_date}}
+            AND date(aws.usage_start) <= {{end_date}}
             AND dtm.aws_id IS NULL
             AND ptm.aws_id IS NULL
             AND ntm.aws_id IS NULL
@@ -848,7 +883,7 @@ CREATE TEMPORARY TABLE reporting_ocp_aws_storage_openshift_cluster_tag_matched A
 
 -- We UNION the various matches into a table holding all of the
 -- OpenShift volume data matches for easier use.
-CREATE TEMPORARY TABLE reporting_ocpawsstoragelineitem_daily_{uuid} AS (
+CREATE TEMPORARY TABLE reporting_ocpawsstoragelineitem_daily_{{uuid | sqlsafe}} AS (
     SELECT *
     FROM reporting_ocp_aws_storage_direct_tag_matched
 
@@ -874,7 +909,7 @@ CREATE TEMPORARY TABLE reporting_ocpawsstoragelineitem_daily_{uuid} AS (
 -- with a GROUP BY using the AWS ID to deduplicate
 -- the AWS data. This should ensure that we never double count
 -- AWS cost or usage.
-CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_daily_summary_{uuid} AS (
+CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_daily_summary_{{uuid | sqlsafe}} AS (
     WITH cte_pod_project_cost AS (
         SELECT pc.aws_id,
             jsonb_object_agg(pc.namespace, pc.pod_cost) as project_costs
@@ -882,7 +917,7 @@ CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_daily_summary_{uuid} AS (
             SELECT li.aws_id,
                 li.namespace,
                 sum(pod_cost) as pod_cost
-            FROM reporting_ocpawsusagelineitem_daily_{uuid} as li
+            FROM reporting_ocpawsusagelineitem_daily_{{uuid | sqlsafe}} as li
             GROUP BY li.aws_id, li.namespace
         ) AS pc
         GROUP BY pc.aws_id
@@ -894,12 +929,13 @@ CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_daily_summary_{uuid} AS (
             SELECT li.aws_id,
                 li.namespace,
                 sum(pod_cost) as pod_cost
-            FROM reporting_ocpawsstoragelineitem_daily_{uuid} as li
+            FROM reporting_ocpawsstoragelineitem_daily_{{uuid | sqlsafe}} as li
             GROUP BY li.aws_id, li.namespace
         ) AS pc
         GROUP BY pc.aws_id
     )
-    SELECT max(li.cluster_id) as cluster_id,
+    SELECT max(li.report_period_id) as report_period_id,
+        max(li.cluster_id) as cluster_id,
         max(li.cluster_alias) as cluster_alias,
         array_agg(DISTINCT li.namespace) as namespace,
         array_agg(DISTINCT li.pod) as pod,
@@ -922,23 +958,24 @@ CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_daily_summary_{uuid} AS (
         max(li.unblended_cost) as unblended_cost,
         max(li.shared_projects) as shared_projects,
         pc.project_costs as project_costs
-    FROM reporting_ocpawsusagelineitem_daily_{uuid} as li
-    JOIN {schema}.reporting_awscostentryproduct AS p
+    FROM reporting_ocpawsusagelineitem_daily_{{uuid | sqlsafe}} as li
+    JOIN {{schema | sqlsafe}}.reporting_awscostentryproduct AS p
         ON li.cost_entry_product_id = p.id
     JOIN cte_pod_project_cost as pc
         ON li.aws_id = pc.aws_id
-    LEFT JOIN {schema}.reporting_awscostentrypricing as pr
+    LEFT JOIN {{schema | sqlsafe}}.reporting_awscostentrypricing as pr
         ON li.cost_entry_pricing_id = pr.id
-    LEFT JOIN {schema}.reporting_awsaccountalias AS aa
+    LEFT JOIN {{schema | sqlsafe}}.reporting_awsaccountalias AS aa
         ON li.usage_account_id = aa.account_id
-    WHERE date(li.usage_start) >= '{start_date}'
-        AND date(li.usage_start) <= '{end_date}'
+    WHERE date(li.usage_start) >= {{start_date}}
+        AND date(li.usage_start) <= {{end_date}}
     -- Dedup on AWS line item so we never double count usage or cost
     GROUP BY li.aws_id, li.tags, pc.project_costs
 
     UNION
 
-    SELECT max(li.cluster_id) as cluster_id,
+    SELECT max(li.report_period_id) as report_period_id,
+        max(li.cluster_id) as cluster_id,
         max(li.cluster_alias) as cluster_alias,
         array_agg(DISTINCT li.namespace) as namespace,
         array_agg(DISTINCT li.pod) as pod,
@@ -961,19 +998,19 @@ CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_daily_summary_{uuid} AS (
         max(li.unblended_cost) as unblended_cost,
         max(li.shared_projects) as shared_projects,
         pc.project_costs
-    FROM reporting_ocpawsstoragelineitem_daily_{uuid} AS li
-    JOIN {schema}.reporting_awscostentryproduct AS p
+    FROM reporting_ocpawsstoragelineitem_daily_{{uuid | sqlsafe}} AS li
+    JOIN {{schema | sqlsafe}}.reporting_awscostentryproduct AS p
         ON li.cost_entry_product_id = p.id
     JOIN cte_storage_project_cost AS pc
         ON li.aws_id = pc.aws_id
-    LEFT JOIN {schema}.reporting_awscostentrypricing as pr
+    LEFT JOIN {{schema | sqlsafe}}.reporting_awscostentrypricing as pr
         ON li.cost_entry_pricing_id = pr.id
-    LEFT JOIN {schema}.reporting_awsaccountalias AS aa
+    LEFT JOIN {{schema | sqlsafe}}.reporting_awsaccountalias AS aa
         ON li.usage_account_id = aa.account_id
-    LEFT JOIN reporting_ocpawsusagelineitem_daily_{uuid} AS ulid
+    LEFT JOIN reporting_ocpawsusagelineitem_daily_{{uuid | sqlsafe}} AS ulid
         ON ulid.aws_id = li.aws_id
-    WHERE date(li.usage_start) >= '{start_date}'
-        AND date(li.usage_start) <= '{end_date}'
+    WHERE date(li.usage_start) >= {{start_date}}
+        AND date(li.usage_start) <= {{end_date}}
         AND ulid.aws_id IS NULL
     GROUP BY li.aws_id, li.tags, pc.project_costs
 )
@@ -987,9 +1024,11 @@ CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_daily_summary_{uuid} AS (
 -- point of view. Here usage and cost are divided by the
 -- number of pods sharing the cost so the values turn out the
 -- same when reported.
-CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_project_daily_summary_{uuid} AS (
-    SELECT li.cluster_id,
+CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_project_daily_summary_{{uuid | sqlsafe}} AS (
+    SELECT li.report_period_id,
+        li.cluster_id,
         li.cluster_alias,
+        'Pod' as data_source,
         li.namespace,
         li.pod,
         li.node,
@@ -1011,17 +1050,18 @@ CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_project_daily_summary_{uuid}
         sum(li.unblended_cost / li.shared_pods) as unblended_cost,
         max(li.shared_pods) as shared_pods,
         li.pod_cost
-    FROM reporting_ocpawsusagelineitem_daily_{uuid} as li
-    JOIN {schema}.reporting_awscostentryproduct AS p
+    FROM reporting_ocpawsusagelineitem_daily_{{uuid | sqlsafe}} as li
+    JOIN {{schema | sqlsafe}}.reporting_awscostentryproduct AS p
         ON li.cost_entry_product_id = p.id
-    LEFT JOIN {schema}.reporting_awscostentrypricing as pr
+    LEFT JOIN {{schema | sqlsafe}}.reporting_awscostentrypricing as pr
         ON li.cost_entry_pricing_id = pr.id
-    LEFT JOIN {schema}.reporting_awsaccountalias AS aa
+    LEFT JOIN {{schema | sqlsafe}}.reporting_awsaccountalias AS aa
         ON li.usage_account_id = aa.account_id
-    WHERE date(li.usage_start) >= '{start_date}'
-        AND date(li.usage_start) <= '{end_date}'
+    WHERE date(li.usage_start) >= {{start_date}}
+        AND date(li.usage_start) <= {{end_date}}
     -- Grouping by OCP this time for the by project view
-    GROUP BY li.ocp_id,
+    GROUP BY li.report_period_id,
+        li.ocp_id,
         li.cluster_id,
         li.cluster_alias,
         li.namespace,
@@ -1032,8 +1072,10 @@ CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_project_daily_summary_{uuid}
 
     UNION
 
-    SELECT li.cluster_id,
+    SELECT li.report_period_id,
+        li.cluster_id,
         li.cluster_alias,
+        'Storage' as data_source,
         li.namespace,
         li.pod,
         li.node,
@@ -1055,19 +1097,20 @@ CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_project_daily_summary_{uuid}
         sum(li.unblended_cost / li.shared_pods) as unblended_cost,
         max(li.shared_pods) as shared_pods,
         li.pod_cost
-    FROM reporting_ocpawsstoragelineitem_daily_{uuid} AS li
-    JOIN {schema}.reporting_awscostentryproduct AS p
+    FROM reporting_ocpawsstoragelineitem_daily_{{uuid | sqlsafe}} AS li
+    JOIN {{schema | sqlsafe}}.reporting_awscostentryproduct AS p
         ON li.cost_entry_product_id = p.id
-    LEFT JOIN {schema}.reporting_awscostentrypricing as pr
+    LEFT JOIN {{schema | sqlsafe}}.reporting_awscostentrypricing as pr
         ON li.cost_entry_pricing_id = pr.id
-    LEFT JOIN {schema}.reporting_awsaccountalias AS aa
+    LEFT JOIN {{schema | sqlsafe}}.reporting_awsaccountalias AS aa
         ON li.usage_account_id = aa.account_id
-    LEFT JOIN reporting_ocpawsusagelineitem_daily_{uuid} AS ulid
+    LEFT JOIN reporting_ocpawsusagelineitem_daily_{{uuid | sqlsafe}} AS ulid
         ON ulid.aws_id = li.aws_id
-    WHERE date(li.usage_start) >= '{start_date}'
-        AND date(li.usage_start) <= '{end_date}'
+    WHERE date(li.usage_start) >= {{start_date}}
+        AND date(li.usage_start) <= {{end_date}}
         AND ulid.aws_id IS NULL
     GROUP BY li.ocp_id,
+        li.report_period_id,
         li.cluster_id,
         li.cluster_alias,
         li.namespace,
@@ -1080,15 +1123,26 @@ CREATE TEMPORARY TABLE reporting_ocpawscostlineitem_project_daily_summary_{uuid}
 ;
 
 -- Clear out old entries first
-DELETE FROM {schema}.reporting_ocpawscostlineitem_daily_summary
-WHERE date(usage_start) >= '{start_date}'
-    AND date(usage_start) <= '{end_date}'
-    {aws_where_clause}
-    {ocp_where_clause}
+DELETE FROM {{schema | sqlsafe}}.reporting_ocpawscostlineitem_daily_summary
+WHERE date(usage_start) >= {{start_date}}
+    AND date(usage_start) <= {{end_date}}
+    --aws_where_clause
+    {% if bill_ids %}
+    AND cost_entry_bill_id IN (
+        {%- for bill_id in bill_ids -%}
+        {{bill_id}}{% if not loop.last %},{% endif %}
+        {%- endfor -%}
+    )
+    {% endif %}
+    --ocp_where_clause
+    {% if cluster_id %}
+    AND cluster_id = {{cluster_id}}
+    {% endif %}
 ;
 
 -- Populate the daily aggregate line item data
-INSERT INTO {schema}.reporting_ocpawscostlineitem_daily_summary (
+INSERT INTO {{schema | sqlsafe}}.reporting_ocpawscostlineitem_daily_summary (
+    report_period_id,
     cluster_id,
     cluster_alias,
     namespace,
@@ -1113,7 +1167,8 @@ INSERT INTO {schema}.reporting_ocpawscostlineitem_daily_summary (
     shared_projects,
     project_costs
 )
-    SELECT cluster_id,
+    SELECT report_period_id,
+        cluster_id,
         cluster_alias,
         namespace,
         pod,
@@ -1136,19 +1191,31 @@ INSERT INTO {schema}.reporting_ocpawscostlineitem_daily_summary (
         unblended_cost,
         shared_projects,
         project_costs
-    FROM reporting_ocpawscostlineitem_daily_summary_{uuid}
+    FROM reporting_ocpawscostlineitem_daily_summary_{{uuid | sqlsafe}}
 ;
 
-DELETE FROM {schema}.reporting_ocpawscostlineitem_project_daily_summary
-WHERE date(usage_start) >= '{start_date}'
-    AND date(usage_start) <= '{end_date}'
-    {aws_where_clause}
-    {ocp_where_clause}
+DELETE FROM {{schema | sqlsafe}}.reporting_ocpawscostlineitem_project_daily_summary
+WHERE date(usage_start) >= {{start_date}}
+    AND date(usage_start) <= {{end_date}}
+    --aws_where_clause
+    {% if bill_ids %}
+    AND cost_entry_bill_id IN (
+        {%- for bill_id in bill_ids -%}
+        {{bill_id}}{% if not loop.last %},{% endif %}
+        {%- endfor -%}
+    )
+    {% endif %}
+    --ocp_where_clause
+    {% if cluster_id %}
+    AND cluster_id = {{cluster_id}}
+    {% endif %}
 ;
 
-INSERT INTO {schema}.reporting_ocpawscostlineitem_project_daily_summary (
+INSERT INTO {{schema | sqlsafe}}.reporting_ocpawscostlineitem_project_daily_summary (
+    report_period_id,
     cluster_id,
     cluster_alias,
+    data_source,
     namespace,
     pod,
     node,
@@ -1170,8 +1237,10 @@ INSERT INTO {schema}.reporting_ocpawscostlineitem_project_daily_summary (
     unblended_cost,
     pod_cost
 )
-    SELECT cluster_id,
+    SELECT report_period_id,
+        cluster_id,
         cluster_alias,
+        data_source,
         namespace,
         pod,
         node,
@@ -1192,4 +1261,4 @@ INSERT INTO {schema}.reporting_ocpawscostlineitem_project_daily_summary (
         normalized_usage_amount,
         unblended_cost,
         pod_cost
-    FROM reporting_ocpawscostlineitem_project_daily_summary_{uuid}
+    FROM reporting_ocpawscostlineitem_project_daily_summary_{{uuid | sqlsafe}}

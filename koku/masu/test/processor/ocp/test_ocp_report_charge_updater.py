@@ -19,6 +19,8 @@
 from dateutil.relativedelta import relativedelta
 from unittest.mock import patch
 from decimal import Decimal
+import random
+import string
 import uuid
 
 from tenant_schemas.utils import schema_context
@@ -61,24 +63,29 @@ class OCPReportChargeUpdaterTest(MasuTestCase):
     def setUp(self):
         """"Set up a test with database objects."""
         super().setUp()
-        provider_id = self.provider_accessor.get_provider().id
+        provider_uuid = self.provider_accessor.get_provider().uuid
         self.cluster_id = self.ocp_provider_resource_name
 
-        reporting_period = self.creator.create_ocp_report_period(provider_id=provider_id, cluster_id=self.cluster_id)
+        reporting_period = self.creator.create_ocp_report_period(provider_uuid=provider_uuid, cluster_id=self.cluster_id)
 
         report = self.creator.create_ocp_report(reporting_period, reporting_period.report_period_start)
         self.updater = OCPReportChargeUpdater(
             schema=self.schema,
-            provider_uuid=self.ocp_provider_uuid,
-            provider_id=provider_id
+            provider_uuid=provider_uuid
         )
+        pod = ''.join(random.choice(string.ascii_lowercase) for _ in range(10))
+        namespace = ''.join(random.choice(string.ascii_lowercase) for _ in range(10))
         self.creator.create_ocp_usage_line_item(
             reporting_period,
-            report
+            report,
+            pod=pod,
+            namespace=namespace
         )
         self.creator.create_ocp_storage_line_item(
             reporting_period,
-            report
+            report,
+            pod=pod,
+            namespace=namespace
         )
         self.creator.create_ocp_usage_line_item(
             reporting_period,
@@ -702,10 +709,10 @@ class OCPReportChargeUpdaterTest(MasuTestCase):
         self.accessor.populate_storage_line_item_daily_summary_table(start_date, end_date, self.cluster_id)
         self.updater.update_summary_charge_info()
 
-        table_name = OCP_REPORT_TABLE_MAP['storage_line_item_daily_summary']
+        table_name = OCP_REPORT_TABLE_MAP['line_item_daily_summary']
 
         with schema_context(self.schema):
-            items = self.accessor._get_db_obj_query(table_name).all()
+            items = self.accessor._get_db_obj_query(table_name).filter(data_source='Storage').all()
             for item in items:
                 storage_charge = float(item.persistentvolumeclaim_charge_gb_month)
                 expected_usage_charge = usage_rate_value * float(item.persistentvolumeclaim_usage_gigabyte_months)

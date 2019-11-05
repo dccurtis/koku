@@ -39,7 +39,7 @@ from masu.database.account_alias_accessor import AccountAliasAccessor
 from masu.database.ocp_report_db_accessor import OCPReportDBAccessor
 from masu.database.provider_db_accessor import ProviderDBAccessor
 from masu.external.date_accessor import DateAccessor
-from masu.util.azure import common as azure_utils
+from masu.util import common as azure_utils
 
 # A subset of AWS product family values
 AWS_PRODUCT_FAMILY = [
@@ -83,11 +83,11 @@ class ReportObjectCreator:
         with AWSReportDBAccessor(self.schema, self.column_map) as accessor:
             return accessor.create_db_object(table_name, data)
 
-    def create_cost_entry_bill(self, provider_id, bill_date=None):
+    def create_cost_entry_bill(self, provider_uuid, bill_date=None):
         """Create a cost entry bill database object for test."""
         table_name = AWS_CUR_TABLE_MAP['bill']
         data = self.create_columns_for_table(table_name)
-        data['provider_id'] = provider_id
+        data['provider_id'] = provider_uuid
         if bill_date:
             bill_start = self.make_datetime_aware(bill_date).replace(day=1).date()
             bill_end = bill_start + relativedelta.relativedelta(months=1)
@@ -149,7 +149,7 @@ class ReportObjectCreator:
             return accessor.create_db_object(table_name, data)
 
     def create_ocp_report_period(
-        self, period_date=None, provider_id=None, cluster_id=None
+        self, provider_uuid, period_date=None, cluster_id=None
     ):
         """Create an OCP report database object for test."""
         table_name = OCP_REPORT_TABLE_MAP['report_period']
@@ -160,7 +160,7 @@ class ReportObjectCreator:
         )
         data = {
             'cluster_id': cluster_id if cluster_id else self.fake.pystr()[:8],
-            'provider_id': provider_id if provider_id else 1,
+            'provider_id': provider_uuid,
             'report_period_start': period_start,
             'report_period_end': period_end,
         }
@@ -192,6 +192,8 @@ class ReportObjectCreator:
                                    report_period,
                                    report,
                                    resource_id=None,
+                                   pod=None,
+                                   namespace=None,
                                    null_cpu_usage=False):
         """Create an OCP usage line item database object for test."""
         table_name = OCP_REPORT_TABLE_MAP['line_item']
@@ -208,10 +210,14 @@ class ReportObjectCreator:
         data['report_id'] = report.id
         if null_cpu_usage:
             data['pod_usage_cpu_core_seconds'] = None
+        if pod:
+            data['pod'] = pod
+        if namespace:
+            data['namespace'] = namespace
         with OCPReportDBAccessor(self.schema, self.column_map) as accessor:
             return accessor.create_db_object(table_name, data)
 
-    def create_ocp_storage_line_item(self, report_period, report):
+    def create_ocp_storage_line_item(self, report_period, report, pod=None, namespace=None):
         """Create an OCP storage line item database object for test."""
         table_name = OCP_REPORT_TABLE_MAP['storage_line_item']
         data = self.create_columns_for_table(table_name)
@@ -222,6 +228,10 @@ class ReportObjectCreator:
 
         data['report_period_id'] = report_period.id
         data['report_id'] = report.id
+        if pod:
+            data['pod'] = pod
+        if namespace:
+            data['namespace'] = namespace
         with OCPReportDBAccessor(self.schema, self.column_map) as accessor:
             return accessor.create_db_object(table_name, data)
 
@@ -233,7 +243,6 @@ class ReportObjectCreator:
 
         for column in columns:
             col_type = column_types[column]
-
             # This catches several different types of IntegerFields such as:
             # PositiveIntegerField, BigIntegerField,
             if 'IntegerField' in col_type:
@@ -351,11 +360,11 @@ class ReportObjectCreator:
             obj = accessor.create_db_object(table_name, data)
         return obj
 
-    def create_azure_cost_entry_bill(self, provider_id, bill_date=None):
+    def create_azure_cost_entry_bill(self, provider_uuid, bill_date=None):
         """Create an Azure cost entry bill database object for test."""
         table_name = AZURE_REPORT_TABLE_MAP['bill']
         data = self.create_columns_for_table(table_name)
-        data['provider_id'] = provider_id
+        data['provider_id'] = provider_uuid
         fake_bill_date = self.make_datetime_aware(self.fake.past_datetime())
         data['billing_period_start'] = fake_bill_date
         data['billing_period_end'] = fake_bill_date
@@ -370,18 +379,20 @@ class ReportObjectCreator:
         with AzureReportDBAccessor(self.schema, self.column_map) as accessor:
             return accessor.create_db_object(table_name, data)
 
-    def create_azure_cost_entry_product(self):
+    def create_azure_cost_entry_product(self, provider_uuid):
         """Create an Azure cost entry product database object for test."""
         table_name = AZURE_REPORT_TABLE_MAP['product']
         data = self.create_columns_for_table(table_name)
+        data['provider_id'] = provider_uuid
 
         with AzureReportDBAccessor(self.schema, self.column_map) as accessor:
             return accessor.create_db_object(table_name, data)
 
-    def create_azure_meter(self):
+    def create_azure_meter(self, provider_uuid):
         """Create an Azure meter database object for test."""
         table_name = AZURE_REPORT_TABLE_MAP['meter']
         data = self.create_columns_for_table(table_name)
+        data['provider_id'] = provider_uuid
 
         with AzureReportDBAccessor(self.schema, self.column_map) as accessor:
             return accessor.create_db_object(table_name, data)
@@ -408,6 +419,7 @@ class ReportObjectCreator:
         data.update(extra_data)
         with AzureReportDBAccessor(self.schema, self.column_map) as accessor:
             return accessor.create_db_object(table_name, data)
+
 
 def map_django_field_type_to_python_type(field):
     """Map a Django field to its corresponding python type."""

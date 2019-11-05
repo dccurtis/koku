@@ -35,6 +35,7 @@ services:
         - MASU_SECRET_KEY=abc
         - prometheus_multiproc_dir=/tmp
         - API_PATH_PREFIX=${API_PATH_PREFIX-/api/cost-management}
+        - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
       privileged: true
       ports:
           - 8000:8000
@@ -160,17 +161,20 @@ services:
         - ENABLE_S3_ARCHIVING=False
         - S3_BUCKET_NAME=koku-bucket
         - S3_BUCKET_PATH=data_archive
+        - PVC_DIR=${PVC_DIR-/testing/pvc_dir}
+        - GOOGLE_APPLICATION_CREDENTIALS=${GOOGLE_APPLICATION_CREDENTIALS}
       privileged: true
       volumes:
         - '.:/koku'
-        # - '~/azure_local:/tmp/local_container'
-        # - '~/aws_local:/tmp/local_bucket'
-        # - '~/aws_local_0:/tmp/local_bucket_0'
-        # - '~/aws_local_1:/tmp/local_bucket_1'
-        # - '~/aws_local_2:/tmp/local_bucket_2'
-        # - '~/aws_local_3:/tmp/local_bucket_3'
-        # - '~/aws_local_4:/tmp/local_bucket_4'
-        # - '~/insights_local:/var/tmp/insights_local'
+        - './testing:/testing'
+        - './testing/local_providers/azure_local:/tmp/local_container'
+        - './testing/local_providers/aws_local:/tmp/local_bucket'
+        - './testing/local_providers/aws_local_0:/tmp/local_bucket_0'
+        - './testing/local_providers/aws_local_1:/tmp/local_bucket_1'
+        - './testing/local_providers/aws_local_2:/tmp/local_bucket_2'
+        - './testing/local_providers/aws_local_3:/tmp/local_bucket_3'
+        - './testing/local_providers/aws_local_4:/tmp/local_bucket_4'
+        - './testing/local_providers/insights_local:/var/tmp/masu/insights_local'
       links:
           - koku-rabbit
       depends_on:

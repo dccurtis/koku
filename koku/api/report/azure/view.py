@@ -17,14 +17,20 @@
 """Azure views."""
 
 from api.common.permissions.azure_access import AzureAccessPermission
+from api.report.azure.query_handler import AzureReportQueryHandler
+from api.report.azure.serializers import AzureQueryParamSerializer
 from api.report.view import ReportView
+from reporting.provider.azure.models import AzureTagsSummary
 
 
 class AzureView(ReportView):
     """Azure Base View."""
 
     permission_classes = [AzureAccessPermission]
-    provider = 'azure'
+    provider = 'AZURE'
+    serializer = AzureQueryParamSerializer
+    query_handler = AzureReportQueryHandler
+    tag_handler = [AzureTagsSummary]
 
 
 class AzureCostView(AzureView):

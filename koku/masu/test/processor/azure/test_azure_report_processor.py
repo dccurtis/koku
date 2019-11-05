@@ -23,20 +23,19 @@ import copy
 import csv
 import tempfile
 import shutil
+from unittest.mock import patch
+
 from tenant_schemas.utils import schema_context
 
+from masu.config import Config
 from masu.database import AZURE_REPORT_TABLE_MAP
 from masu.database.azure_report_db_accessor import AzureReportDBAccessor
 from masu.database.report_manifest_db_accessor import ReportManifestDBAccessor
 from masu.database.report_stats_db_accessor import ReportStatsDBAccessor
 from masu.database.reporting_common_db_accessor import ReportingCommonDBAccessor
+from masu.external import UNCOMPRESSED
 from masu.external.date_accessor import DateAccessor
-
 from masu.processor.azure.azure_report_processor import AzureReportProcessor
-from masu.external import GZIP_COMPRESSED, UNCOMPRESSED
-
-from masu.config import Config
-
 from masu.test import MasuTestCase
 
 
@@ -48,8 +47,6 @@ class AzureReportProcessorTest(MasuTestCase):
         """Set up the test class with required objects."""
         super().setUpClass()
         cls.test_report = './koku/masu/test/data/azure/costreport_a243c6f2-199f-4074-9a2c-40e671cf1584.csv'
-
-
         cls.date_accessor = DateAccessor()
         cls.manifest_accessor = ReportManifestDBAccessor()
 
@@ -73,7 +70,7 @@ class AzureReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.azure_provider_id,
+            provider_uuid=self.azure_provider_uuid,
         )
 
         billing_start = self.date_accessor.today_with_timezone('UTC').replace(
@@ -84,14 +81,13 @@ class AzureReportProcessorTest(MasuTestCase):
             'assembly_id': self.assembly_id,
             'billing_period_start_datetime': billing_start,
             'num_total_files': 1,
-            'provider_id': self.azure_provider.id,
+            'provider_uuid': self.azure_provider_uuid,
         }
 
         self.accessor = AzureReportDBAccessor(self.schema, self.column_map)
         self.report_schema = self.accessor.report_schema
         self.manifest = self.manifest_accessor.add(**self.manifest_dict)
         self.manifest_accessor.commit()
-
 
     def test_azure_initializer(self):
         """Test Azure initializer."""
@@ -133,6 +129,54 @@ class AzureReportProcessorTest(MasuTestCase):
                 count = table.objects.count()
             self.assertTrue(count > counts[table_name])
 
+    def test_process_azure_small_batches(self):
+        """Test the processing of an uncompressed azure file in small batches."""
+        with patch.object(Config, 'REPORT_PROCESSING_BATCH_SIZE', 1):
+            # Re-init processor so that REPORT_PROCESSING_BATCH_SIZE is 1.
+            self.processor = AzureReportProcessor(
+                schema_name=self.schema,
+                report_path=self.test_report,
+                compression=UNCOMPRESSED,
+                provider_uuid=self.azure_provider_uuid,
+            )
+
+            # Re-run test with new configuration and verify it's still successful.
+            self.test_azure_process()
+
+    def notest_process_azure_small_batches(self):
+        """Test the processing of an uncompressed azure file in small batches."""
+        with patch.object(Config, 'REPORT_PROCESSING_BATCH_SIZE', 1):
+            counts = {}
+
+            processor = AzureReportProcessor(
+                schema_name=self.schema,
+                report_path=self.test_report,
+                compression=UNCOMPRESSED,
+                provider_uuid=self.azure_provider_uuid,
+            )
+            report_db = self.accessor
+            report_schema = report_db.report_schema
+            for table_name in self.report_tables:
+                table = getattr(report_schema, table_name)
+                with schema_context(self.schema):
+                    count = table.objects.count()
+                counts[table_name] = count
+            logging.disable(
+                logging.NOTSET
+            )  # We are currently disabling all logging below CRITICAL in masu/__init__.py
+            with self.assertLogs(
+                'masu.processor.azure.azure_report_processor', level='INFO'
+            ) as logger:
+                processor.process()
+                self.assertIn('INFO:masu.processor.azure.azure_report_processor', logger.output[0])
+                self.assertIn('costreport_a243c6f2-199f-4074-9a2c-40e671cf1584.csv', logger.output[0])
+
+            for table_name in self.report_tables:
+                table = getattr(report_schema, table_name)
+                with schema_context(self.schema):
+                    count = table.objects.count()
+                self.assertTrue(count > counts[table_name])
+
     def test_azure_process_duplicates(self):
         """Test that row duplicates are not inserted into the DB."""
         counts = {}
@@ -140,7 +184,7 @@ class AzureReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.azure_provider.id,
+            provider_uuid=self.azure_provider_uuid,
         )
 
         # Process for the first time
@@ -162,7 +206,7 @@ class AzureReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.azure_provider.id,
+            provider_uuid=self.azure_provider_uuid,
         )
         # Process for the second time
         processor.process()
@@ -183,10 +227,10 @@ class AzureReportProcessorTest(MasuTestCase):
 
         query = self.accessor._get_db_obj_query(table_name)
         id_in_db = query.order_by('-id').first().id
-        provider_id = query.order_by('-id').first().provider_id
+        provider_uuid = query.order_by('-id').first().provider_id
 
         self.assertEqual(bill_id, id_in_db)
-        self.assertIsNotNone(provider_id)
+        self.assertIsNotNone(provider_uuid)
 
     def test_azure_create_product(self):
         """Test that a product id is returned."""
@@ -278,13 +322,12 @@ class AzureReportProcessorTest(MasuTestCase):
             path = '{}/{}'.format(cur_dir, item['file'])
             f = open(path, 'w')
             obj = self.manifest_accessor.get_manifest(self.assembly_id,
-                                                      self.azure_provider.id)
+                                                      self.azure_provider_uuid)
             with ReportStatsDBAccessor(item['file'], obj.id) as stats:
                 stats.update(last_completed_datetime=item['processed_date'])
             f.close()
             if (
                 not manifest_data.get('assemblyId') in item['file']
-                and item['processed_date']
             ):
                 expected_delete_list.append(path)
         removed_files = self.processor.remove_temp_cur_files(cur_dir)

@@ -62,6 +62,10 @@ class OCPAWSCostLineItemDailySummary(models.Model):
         ]
 
     # OCP Fields
+    report_period = models.ForeignKey(
+        'OCPUsageReportPeriod', on_delete=models.CASCADE, null=True
+    )
+
     cluster_id = models.CharField(max_length=50, null=True)
 
     cluster_alias = models.CharField(max_length=256, null=True)
@@ -81,7 +85,7 @@ class OCPAWSCostLineItemDailySummary(models.Model):
 
     # AWS Fields
     cost_entry_bill = models.ForeignKey('AWSCostEntryBill',
-                                        on_delete=models.PROTECT,
+                                        on_delete=models.CASCADE,
                                         null=True)
 
     product_code = models.CharField(max_length=50, null=False)
@@ -93,7 +97,7 @@ class OCPAWSCostLineItemDailySummary(models.Model):
     usage_account_id = models.CharField(max_length=50, null=False)
 
     account_alias = models.ForeignKey('AWSAccountAlias',
-                                      on_delete=models.PROTECT,
+                                      on_delete=models.SET_NULL,
                                       null=True)
 
     availability_zone = models.CharField(max_length=50, null=True)
@@ -171,9 +175,16 @@ class OCPAWSCostLineItemProjectDailySummary(models.Model):
         ]
 
     # OCP Fields
+    report_period = models.ForeignKey(
+        'OCPUsageReportPeriod', on_delete=models.CASCADE, null=True
+    )
+
     cluster_id = models.CharField(max_length=50, null=True)
 
     cluster_alias = models.CharField(max_length=256, null=True)
+
+    # Whether the data comes from a pod or volume report
+    data_source = models.CharField(max_length=64, null=True)
 
     # Kubernetes objects by convention have a max name length of 253 chars
     namespace = models.CharField(max_length=253, null=False)
@@ -192,7 +203,7 @@ class OCPAWSCostLineItemProjectDailySummary(models.Model):
 
     # AWS Fields
     cost_entry_bill = models.ForeignKey('AWSCostEntryBill',
-                                        on_delete=models.PROTECT,
+                                        on_delete=models.CASCADE,
                                         null=True)
 
     product_code = models.CharField(max_length=50, null=False)
@@ -204,7 +215,7 @@ class OCPAWSCostLineItemProjectDailySummary(models.Model):
     usage_account_id = models.CharField(max_length=50, null=False)
 
     account_alias = models.ForeignKey('AWSAccountAlias',
-                                      on_delete=models.PROTECT,
+                                      on_delete=models.SET_NULL,
                                       null=True)
 
     availability_zone = models.CharField(max_length=50, null=True)

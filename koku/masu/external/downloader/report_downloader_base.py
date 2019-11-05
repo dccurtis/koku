@@ -46,9 +46,9 @@ class ReportDownloaderBase():
             self.download_path = download_path
         else:
             self.download_path = mkdtemp(prefix='masu')
-        self._provider_id = None
-        if 'provider_id' in kwargs:
-            self._provider_id = kwargs['provider_id']
+        self._provider_uuid = None
+        if 'provider_uuid' in kwargs:
+            self._provider_uuid = kwargs['provider_uuid']
 
     def _get_existing_manifest_db_id(self, assembly_id):
         """Return a manifest DB object if it exists."""
@@ -56,7 +56,7 @@ class ReportDownloaderBase():
         with ReportManifestDBAccessor() as manifest_accessor:
             manifest = manifest_accessor.get_manifest(
                 assembly_id,
-                self._provider_id
+                self._provider_uuid
             )
             if manifest:
                 manifest_id = manifest.id
@@ -74,15 +74,12 @@ class ReportDownloaderBase():
 
         Returns True if the manifest should be downloaded and processed.
         """
-        manifest_id = None
-        num_processed_files = 0
-        num_total_files = 0
         today = DateAccessor().today_with_timezone('UTC')
         last_completed_cutoff = today - datetime.timedelta(hours=1)
         with ReportManifestDBAccessor() as manifest_accessor:
             manifest = manifest_accessor.get_manifest(
                 assembly_id,
-                self._provider_id
+                self._provider_uuid
             )
             if manifest:
                 manifest_id = manifest.id
@@ -92,10 +89,12 @@ class ReportDownloaderBase():
                     completed_datetime = manifest_accessor.get_last_report_completed_datetime(
                         manifest_id
                     )
-                    if completed_datetime and completed_datetime < last_completed_cutoff:
+                    if (completed_datetime and completed_datetime < last_completed_cutoff) or \
+                            not completed_datetime:
                         # It has been more than an hour since we processed a file
-                        # and we didn't finish processing. We should download
-                        # and reprocess.
+                        # and we didn't finish processing. Or, if there is a
+                        # start time but no completion time recorded.
+                        # We should download and reprocess.
                         manifest_accessor.reset_manifest(manifest_id)
                         return True
                 # The manifest exists and we have processed all the files.
@@ -112,7 +111,7 @@ class ReportDownloaderBase():
         with ReportManifestDBAccessor() as manifest_accessor:
             manifest_entry = manifest_accessor.get_manifest(
                 assembly_id,
-                self._provider_id
+                self._provider_uuid
             )
 
             if not manifest_entry:
@@ -122,7 +121,7 @@ class ReportDownloaderBase():
                     'assembly_id': assembly_id,
                     'billing_period_start_datetime': billing_start,
                     'num_total_files': num_of_files,
-                    'provider_id': self._provider_id
+                    'provider_uuid': self._provider_uuid
                 }
                 manifest_entry = manifest_accessor.add(**manifest_dict)
 

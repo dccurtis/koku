@@ -105,7 +105,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
 
         billing_start = self.date_accessor.today_with_timezone('UTC').replace(
@@ -116,7 +116,7 @@ class AWSReportProcessorTest(MasuTestCase):
             'assembly_id': self.assembly_id,
             'billing_period_start_datetime': billing_start,
             'num_total_files': 2,
-            'provider_id': self.aws_provider.id,
+            'provider_uuid': self.aws_provider_uuid,
         }
 
         self.accessor = AWSReportDBAccessor(self.schema, self.column_map)
@@ -151,7 +151,7 @@ class AWSReportProcessorTest(MasuTestCase):
                 schema_name=self.schema,
                 report_path=self.test_report,
                 compression='unsupported',
-                provider_id=self.aws_provider.id,
+                provider_uuid=self.aws_provider_uuid,
             )
 
     def test_process_default(self):
@@ -161,7 +161,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
             manifest_id=self.manifest.id,
         )
         report_db = self.accessor
@@ -173,12 +173,17 @@ class AWSReportProcessorTest(MasuTestCase):
             counts[table_name] = count
 
         bill_date = self.manifest.billing_period_start_datetime.date()
-        expected = f'INFO:masu.processor.aws.aws_report_processor:Deleting data for schema: acct10001 and bill date: {bill_date}'
+        expected = (
+            f'INFO:masu.processor.report_processor_base:Deleting data for:\n'
+            f' schema_name: acct10001\n'
+            f' provider_uuid: {self.aws_provider_uuid}\n'
+            f' bill date: {bill_date}'
+        )
         logging.disable(
             logging.NOTSET
         )  # We are currently disabling all logging below CRITICAL in masu/__init__.py
         with self.assertLogs(
-            'masu.processor.aws.aws_report_processor', level='INFO'
+            'masu.processor.report_processor_base', level='INFO'
         ) as logger:
             processor.process()
             self.assertIn(expected, logger.output)
@@ -204,7 +209,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report_gzip,
             compression=GZIP_COMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
         report_db = self.accessor
         report_schema = report_db.report_schema
@@ -237,7 +242,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
 
         # Process for the first time
@@ -259,7 +264,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
         # Process for the second time
         processor.process()
@@ -295,7 +300,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
 
         # Process for the first time
@@ -321,7 +326,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=tmp_file,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
         # Process for the second time
         processor.process()
@@ -361,7 +366,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
 
         # Process for the first time
@@ -387,7 +392,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=tmp_file,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
         processor._batch_size = 2
         # Process for the second time
@@ -426,7 +431,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
 
         # Process for the first time
@@ -443,7 +448,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=tmp_file,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
         # Process for the second time
         processor.process()
@@ -454,7 +459,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=tmp_file,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
         # Process for the third time to make sure the timestamp is the same
         processor.process()
@@ -587,10 +592,10 @@ class AWSReportProcessorTest(MasuTestCase):
 
         query = self.accessor._get_db_obj_query(table_name)
         id_in_db = query.order_by('-id').first().id
-        provider_id = query.order_by('-id').first().provider_id
+        provider_uuid = query.order_by('-id').first().provider_id
 
         self.assertEqual(bill_id, id_in_db)
-        self.assertIsNotNone(provider_id)
+        self.assertIsNotNone(provider_uuid)
 
     def test_create_cost_entry_bill_existing(self):
         """Test that a cost entry bill id is returned from an existing bill."""
@@ -897,13 +902,12 @@ class AWSReportProcessorTest(MasuTestCase):
             path = '{}/{}'.format(cur_dir, item['file'])
             f = open(path, 'w')
             obj = self.manifest_accessor.get_manifest(self.assembly_id,
-                                                      self.aws_provider.id)
+                                                      self.aws_provider_uuid)
             with ReportStatsDBAccessor(item['file'], obj.id) as stats:
                 stats.update(last_completed_datetime=item['processed_date'])
             f.close()
             if (
                 not item['file'].startswith(manifest_data.get('assemblyId'))
-                and item['processed_date']
             ):
                 expected_delete_list.append(path)
 
@@ -936,7 +940,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=tmp_file,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
 
         result = processor._check_for_finalized_bill()
@@ -950,7 +954,7 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
 
         result = processor._check_for_finalized_bill()
@@ -963,11 +967,11 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
             manifest_id=self.manifest.id,
         )
         processor.process()
-        result = processor._delete_line_items()
+        result = processor._delete_line_items(AWSReportDBAccessor, self.column_map)
 
         with schema_context(self.schema):
             bills = self.accessor.get_cost_entry_bills()
@@ -985,11 +989,11 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
             manifest_id=self.manifest.id,
         )
         processor.process()
-        result = processor._delete_line_items()
+        result = processor._delete_line_items(AWSReportDBAccessor, self.column_map)
         with schema_context(self.schema):
             bills = self.accessor.get_cost_entry_bills()
             for bill_id in bills.values():
@@ -1003,10 +1007,10 @@ class AWSReportProcessorTest(MasuTestCase):
             schema_name=self.schema,
             report_path=self.test_report,
             compression=UNCOMPRESSED,
-            provider_id=self.aws_provider.id,
+            provider_uuid=self.aws_provider_uuid,
         )
         processor.process()
-        result = processor._delete_line_items()
+        result = processor._delete_line_items(AWSReportDBAccessor, self.column_map)
         with schema_context(self.schema):
             bills = self.accessor.get_cost_entry_bills()
             for bill_id in bills.values():
