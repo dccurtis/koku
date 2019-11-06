@@ -66,10 +66,5 @@ def source_status(request):
     provider = source.source_type
 
     interface = ProviderAccessor(provider)
-    source_ready = False
-    try:
-        source_ready = interface.cost_usage_source_ready(source_authentication, source_billing_source)
-        source_ready = True
-    except ValidationError:
-        source_ready = False
-    return Response(data=source_ready, status=status.HTTP_200_OK)
+    availability_status = interface.availability_status(source_authentication, source_billing_source)
+    return Response(availability_status, status=status.HTTP_200_OK)
