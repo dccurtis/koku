@@ -11,9 +11,9 @@ fi
 
 LOCAL_HCCM_PATH="$1"
 COMMAND="${@:2}"
-printf "HCCM LOCAL Path is %s\n" "$LOCAL_HCCM_PATH"
-printf "Command is %s\n" "$2"
-printf "Command is %s\n" "$COMMAND"
+printf "HCCM host plugin path: %s\n" "$LOCAL_HCCM_PATH"
+printf "IQE container command: %s\n" "$COMMAND"
+
 main() {
     if command -v docker > /dev/null 2>&1; then
         CONTAINER_RUNTIME=docker
