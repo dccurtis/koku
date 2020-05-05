@@ -16,6 +16,7 @@
 #
 """Management capabilities for Provider functionality."""
 import logging
+from datetime import timedelta
 from functools import partial
 
 from django.conf import settings
@@ -29,7 +30,10 @@ from tenant_schemas.utils import tenant_context
 from api.provider.models import Provider
 from api.provider.models import Sources
 from cost_models.models import CostModelMap
+from masu.external.date_accessor import DateAccessor
 from masu.processor.tasks import refresh_materialized_views
+from masu.processor.tasks import remove_summary_data
+from masu.processor.tasks import update_summary_tables
 from reporting.provider.aws.models import AWSCostEntryBill
 from reporting.provider.azure.models import AzureCostEntryBill
 from reporting.provider.ocp.models import OCPUsageReportPeriod
@@ -171,6 +175,26 @@ class ProviderManager:
         if self.sources_model and from_sources:
             err_msg = f"Provider {self._uuid} must be updated via Sources Integration Service"
             raise ProviderManagerError(err_msg)
+
+    def darken_provider(self):
+        """Darken provider for soft delete."""
+        self.model.dark = True
+        self.model.save()
+        remove_summary_data.delay(self.model.customer.schema_name, self.model.type, self.model.uuid)
+
+    def lighten_provider(self):
+        """Lighten provider for soft delete."""
+        self.model.dark = False
+        self.model.save()
+        end_date = DateAccessor().today().strftime("%Y-%m-%d")
+        start_date = (DateAccessor().today() - timedelta(days=60)).strftime("%Y-%m-%d")
+        update_summary_tables.delay(
+            self.model.customer.schema_name, self.model.type, self.model.uuid, start_date, end_date
+        )
+
+    def is_dark(self):
+        """Returns darkenss status."""
+        return self.model.dark
 
     @transaction.atomic
     def remove(self, request=None, user=None, from_sources=False):

@@ -130,6 +130,10 @@ class ExpiredDataRemover:
         LOG.info(msg)
         return expiration_date
 
+    def remove_summary(self, provider_uuid):
+        """Remove summary data to darken provider."""
+        self._cleaner.purge_summary_data(provider_uuid)
+
     def remove(self, simulate=False, provider_uuid=None, line_items_only=False):
         """
         Remove expired data based on the retention policy.

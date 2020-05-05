@@ -70,11 +70,13 @@ class AWSReportSummaryUpdater:
         with AWSReportDBAccessor(self._schema) as accessor:
             for start, end in date_range_pair(start_date, end_date):
                 LOG.info(
-                    "Updating AWS report daily tables for \n\tSchema: %s" "\n\tProvider: %s \n\tDates: %s - %s",
+                    "Updating AWS report daily tables for \n\tSchema: %s"
+                    "\n\tProvider: %s \n\tDates: %s - %s\ntBills: %s",
                     self._schema,
                     self._provider.uuid,
                     start,
                     end,
+                    str(bill_ids),
                 )
                 accessor.populate_line_item_daily_table(start, end, bill_ids)
 

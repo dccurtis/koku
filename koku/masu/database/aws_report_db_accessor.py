@@ -210,6 +210,7 @@ class AWSReportDBAccessor(ReportDBAccessorBase):
             "schema": self.schema,
         }
         daily_sql, daily_sql_params = self.jinja_sql.prepare_query(daily_sql, daily_sql_params)
+        LOG.info(f"Daily Table update params: {str(daily_sql_params)}")
         self._execute_raw_sql_query(table_name, daily_sql, start_date, end_date, bind_params=list(daily_sql_params))
 
     # pylint: disable=invalid-name

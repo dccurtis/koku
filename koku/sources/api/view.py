@@ -41,6 +41,7 @@ from api.common.filters import CharListFilter
 from api.common.permissions import RESOURCE_TYPE_MAP
 from api.iam.models import Tenant
 from api.iam.serializers import create_schema_name
+from api.provider.models import Provider
 from api.provider.models import Sources
 from api.provider.provider_manager import ProviderManager
 from api.provider.provider_manager import ProviderManagerError
@@ -158,7 +159,14 @@ class SourcesViewSet(*MIXIN_LIST):
         account_id = self.request.user.customer.account_id
         try:
             excludes = self.get_excludes(self.request)
-            queryset = Sources.objects.filter(account_id=account_id).exclude(source_type__in=excludes)
+            dark_providers = Provider.objects.filter(dark=True)
+            dark_uuids = [provider.uuid for provider in dark_providers]
+            # dark_uuids = []
+            queryset = (
+                Sources.objects.filter(account_id=account_id)
+                .exclude(source_type__in=excludes)
+                .exclude(koku_uuid__in=dark_uuids)
+            )
         except Sources.DoesNotExist:
             LOG.error("No sources found for account id %s.", account_id)
 
@@ -267,3 +275,30 @@ class SourcesViewSet(*MIXIN_LIST):
             tenant = Tenant.objects.get(schema_name=schema_name)
             stats.update(manager.provider_statistics(tenant))
         return Response(stats)
+
+    @never_cache
+    @action(methods=["get"], detail=False, permission_classes=[AllowAny])
+    def dark(self, request, pk=None):
+        """Get source stats."""
+        source_uuid = request.query_params.get("uuid")
+        try:
+            manager = ProviderManager(source_uuid)
+            manager.darken_provider()
+        except ProviderManagerError as error:
+            LOG.error(f"Darken Action error: {str(error)}")
+
+        return Response(manager.is_dark())
+
+    @never_cache
+    @action(methods=["get"], detail=False, permission_classes=[AllowAny])
+    def light(self, request, pk=None):
+        """Get source stats."""
+        source_uuid = request.query_params.get("uuid")
+
+        try:
+            manager = ProviderManager(source_uuid)
+            manager.lighten_provider()
+        except ProviderManagerError as error:
+            LOG.error(f"Darken Action error: {str(error)}")
+
+        return Response(manager.is_dark())

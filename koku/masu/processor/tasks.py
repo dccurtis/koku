@@ -41,6 +41,7 @@ from masu.external.date_accessor import DateAccessor
 from masu.processor._tasks.download import _get_report_files
 from masu.processor._tasks.process import _process_report_file
 from masu.processor._tasks.remove_expired import _remove_expired_data
+from masu.processor._tasks.remove_expired import _remove_summary_data
 from masu.processor.cost_model_cost_updater import CostModelCostUpdater
 from masu.processor.report_processor import ReportProcessorError
 from masu.processor.report_summary_updater import ReportSummaryUpdater
@@ -146,6 +147,20 @@ def get_report_files(
     return reports_to_summarize
 
 
+@app.task(name="masu.processor.tasks.remove_summary_data", queue_name="remove_expired")
+def remove_summary_data(schema_name, provider, provider_uuid):
+    """Remove summary data task."""
+    stmt = (
+        f"remove_summary_data called with args:\n"
+        f" schema_name: {schema_name},\n"
+        f" provider: {provider},\n"
+        f" provider_uuid: {provider_uuid},",
+    )
+    LOG.info(stmt)
+    _remove_summary_data(schema_name, provider, provider_uuid)
+    refresh_materialized_views.delay(schema_name, provider)
+
+
 @app.task(name="masu.processor.tasks.remove_expired_data", queue_name="remove_expired")
 def remove_expired_data(schema_name, provider, simulate, provider_uuid=None, line_items_only=False):
     """
@@ -192,6 +207,11 @@ def summarize_reports(reports_to_summarize):
         # on processing time. There are override mechanisms in the
         # Updater classes for when full-month summarization is
         # required.
+        provider_model = Provider.objects.get(uuid=report.get("provider_uuid"))
+        if provider_model.dark:
+            LOG.info(f"{provider_model.uuid} is dark. Skipping summary...")
+            continue
+
         start_date = DateAccessor().today() - datetime.timedelta(days=2)
         start_date = start_date.strftime("%Y-%m-%d")
         end_date = DateAccessor().today().strftime("%Y-%m-%d")

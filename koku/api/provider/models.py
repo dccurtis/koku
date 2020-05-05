@@ -158,6 +158,8 @@ class Provider(models.Model):
 
     active = models.BooleanField(default=True)
 
+    dark = models.BooleanField(default=False)
+
     # This field applies to OpenShift providers and identifies
     # which (if any) cloud provider the cluster is on
     infrastructure = models.ForeignKey("ProviderInfrastructureMap", null=True, on_delete=models.SET_NULL)
