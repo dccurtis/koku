@@ -34,10 +34,9 @@ from api.provider.models import Provider
 from api.provider.models import Sources
 from api.provider.provider_manager import ProviderManagerError
 from koku.middleware import IdentityHeaderMiddleware
-from sources.api.view import SourcesViewSet
+from api.provider.view import SourcesViewSet
 
 
-@override_settings(ROOT_URLCONF="sources.urls")
 class SourcesViewTests(IamTestCase):
     """Test Cases for the sources endpoint."""
 
@@ -211,7 +210,7 @@ class SourcesViewTests(IamTestCase):
         response = self.client.delete(url, content_type="application/json", **self.request_context["request"].META)
         self.assertEqual(response.status_code, 405)
 
-    @patch("sources.api.view.ProviderManager.provider_statistics", return_value={})
+    @patch("api.provider.view.ProviderManager.provider_statistics", return_value={})
     def test_source_get_stats(self, _):
         """Test the GET status endpoint."""
         url = reverse("sources-stats", kwargs={"pk": self.test_source_id})
@@ -220,7 +219,7 @@ class SourcesViewTests(IamTestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIsNotNone(body)
 
-    @patch("sources.api.view.ProviderManager", side_effect=ProviderManagerError("test error"))
+    @patch("api.provider.view.ProviderManager", side_effect=ProviderManagerError("test error"))
     def test_source_list_error(self, _):
         """Test provider_linked is False in list when Provider does not exist."""
         url = reverse("sources-list")
@@ -231,7 +230,7 @@ class SourcesViewTests(IamTestCase):
         self.assertTrue(body.get("data"))
         self.assertFalse(body.get("data")[0]["provider_linked"])
 
-    @patch("sources.api.view.ProviderManager", side_effect=ProviderManagerError("test error"))
+    @patch("api.provider.view.ProviderManager", side_effect=ProviderManagerError("test error"))
     def test_source_retrieve_error(self, _):
         """Test provider_linked is False in Source when Provider does not exist."""
         url = reverse("sources-detail", kwargs={"pk": self.test_source_id})
@@ -241,7 +240,7 @@ class SourcesViewTests(IamTestCase):
         self.assertIsNotNone(body)
         self.assertFalse(body["provider_linked"])
 
-    @patch("sources.api.view.ProviderManager", side_effect=ProviderManagerError("test error"))
+    @patch("api.provider.view.ProviderManager", side_effect=ProviderManagerError("test error"))
     def test_source_get_stats_error(self, _):
         """Test provider_linked is False in source-stats when Provider does not exist."""
         url = reverse("sources-stats", kwargs={"pk": self.test_source_id})

@@ -49,8 +49,8 @@ from api.views import OCPTagView
 from api.views import OCPVolumeView
 from api.views import openapi
 from api.views import SettingsView
+from api.views import SourcesViewSet
 from api.views import StatusView
-from sources.api.views import SourcesViewSet
 
 
 ROUTER = DefaultRouter()

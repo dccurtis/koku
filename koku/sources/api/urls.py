@@ -20,10 +20,8 @@ from rest_framework.routers import DefaultRouter
 
 from sources.api.status import get_status
 from sources.api.views import source_status
-from sources.api.views import SourcesViewSet
 
 ROUTER = DefaultRouter()
-ROUTER.register(r"sources", SourcesViewSet)
 
 # # pylint: disable=invalid-name
 urlpatterns = [
