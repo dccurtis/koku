@@ -379,7 +379,10 @@ def process_message(app_type_id, msg):  # noqa: C901
         return
 
     if msg_data.get("event_type") in (KAFKA_APPLICATION_CREATE,):
+        import time
 
+        LOG.info("Sleeping 30 seconds")
+        time.sleep(30)
         storage.create_source_event(msg_data.get("source_id"), msg_data.get("auth_header"), msg_data.get("offset"))
 
         if storage.is_known_source(msg_data.get("source_id")):
@@ -424,12 +427,6 @@ def get_consumer():
 
 
 running = True
-
-
-def handle_signal(signal, frame):
-    LOG.info("SIGTERM recieved.")
-    global running
-    running = False
 
 
 def listen_for_messages_loop(application_source_id):
@@ -650,8 +647,7 @@ def is_kafka_connected():  # pragma: no cover
     return result
 
 
-@KAFKA_CONNECTION_ERRORS_COUNTER.count_exceptions()
-def sources_integration_thread():  # pragma: no cover
+class SourcesIntegrator(threading.Thread):  # pragma: no cover
     """
     Configure Sources listener thread.
 
@@ -659,40 +655,78 @@ def sources_integration_thread():  # pragma: no cover
         None
 
     """
-    cost_management_type_id = None
-    count = 0
-    while cost_management_type_id is None:
-        # First, hit Souces endpoint to get the cost-mgmt application ID.
-        # Without this initial connection/ID number, the consumer cannot start
-        try:
-            cost_management_type_id = SourcesHTTPClient(
-                Config.SOURCES_FAKE_HEADER
-            ).get_cost_management_application_type_id()
-            LOG.info("Connected to Sources REST API.")
-        except SourcesHTTPClientError as error:
-            LOG.error(f"Unable to connect to Sources REST API. Error: {error}")
-            backoff(count)
-            count += 1
-            LOG.info("Reattempting connection to Sources REST API.")
-        except SourceNotFoundError as err:
-            LOG.error(f"Cost Management application not found: {err}. Exiting...")
-            sys.exit(1)
-        except KeyboardInterrupt:
-            sys.exit(0)
 
-    if is_kafka_connected():  # Next, check that Kafka is running
-        LOG.info("Kafka is running...")
+    def __init__(self):
+        threading.Thread.__init__(self)
 
-    load_process_queue()
-    execute_process_queue(cost_management_type_id)
+        # The shutdown_flag is a threading.Event object that
+        # indicates whether the thread should be terminated.
+        self.shutdown_flag = threading.Event()
 
-    listen_for_messages_loop(cost_management_type_id)
+        # ... Other thread setup code here ...
+
+    @KAFKA_CONNECTION_ERRORS_COUNTER.count_exceptions()
+    def run(self):
+        cost_management_type_id = None
+        count = 0
+        while cost_management_type_id is None:
+            # First, hit Souces endpoint to get the cost-mgmt application ID.
+            # Without this initial connection/ID number, the consumer cannot start
+            try:
+                cost_management_type_id = SourcesHTTPClient(
+                    Config.SOURCES_FAKE_HEADER
+                ).get_cost_management_application_type_id()
+                LOG.info("Connected to Sources REST API.")
+            except SourcesHTTPClientError as error:
+                LOG.error(f"Unable to connect to Sources REST API. Error: {error}")
+                backoff(count)
+                count += 1
+                LOG.info("Reattempting connection to Sources REST API.")
+            except SourceNotFoundError as err:
+                LOG.error(f"Cost Management application not found: {err}. Exiting...")
+                sys.exit(1)
+            except KeyboardInterrupt:
+                LOG.info("KEYBOARD")
+                print("KEYBOARD")
+                sys.exit(0)
+
+        if is_kafka_connected():  # Next, check that Kafka is running
+            LOG.info("Kafka is running...")
+
+        load_process_queue()
+        execute_process_queue(cost_management_type_id)
+
+        listen_for_messages_loop(cost_management_type_id)
+
+
+class ServiceExit(Exception):
+    """
+    Custom exception which is used to trigger the clean exit
+    of all running threads and the main program.
+    """
+
+    pass
+
+
+def handle_signal(signal, frame):
+    LOG.info("SIGTERM recieved.")
+    global running
+    running = False
+    raise ServiceExit
 
 
 def initialize_sources_integration():  # pragma: no cover
     """Start Sources integration thread."""
     signal.signal(signal.SIGTERM, handle_signal)
 
-    event_loop_thread = threading.Thread(target=sources_integration_thread)
-    event_loop_thread.start()
+    try:
+        integration_thread = SourcesIntegrator()
+        # event_loop_thread = threading.Thread(target=sources_integration_thread)
+        # event_loop_thread.daemon = True
+        integration_thread.start()
+    except ServiceExit:
+        LOG.info("EXITING")
+        integration_thread.shutdown_flag.set()
+        integration_thread.join()
+
     LOG.info("Listening for kafka events")
