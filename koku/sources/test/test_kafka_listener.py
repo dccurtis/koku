@@ -17,6 +17,7 @@
 """Test the Sources Kafka Listener handler."""
 import asyncio
 import json
+import queue
 from unittest.mock import patch
 from uuid import uuid4
 
@@ -27,6 +28,7 @@ from django.db.models.signals import post_save
 from django.test import TestCase
 from faker import Faker
 from kafka.errors import KafkaError
+from requests.exceptions import RequestException
 from rest_framework.exceptions import ValidationError
 
 import sources.kafka_listener as source_integration
@@ -71,14 +73,29 @@ class ConsumerRecord:
 
     def __init__(self, topic, offset, event_type, auth_header, value, partition=0):
         """Initialize Msg."""
-        self.topic = topic
-        self.offset = offset
-        self.partition = partition
-        self.headers = (
+        self._topic = topic
+        self._offset = offset
+        self._partition = partition
+        self._headers = (
             ("event_type", bytes(event_type, encoding="utf-8")),
             ("x-rh-identity", bytes(auth_header, encoding="utf-8")),
         )
-        self.value = value
+        self._value = value
+
+    def topic(self):
+        return self._topic
+
+    def offset(self):
+        return self._offset
+
+    def partition(self):
+        return self._partition
+
+    def value(self):
+        return self._value
+
+    def headers(self):
+        return self._headers
 
 
 class MsgDataGenerator:
@@ -122,7 +139,7 @@ class MockKafkaConsumer:
     async def commit(self):
         self.preloaded_messages.pop()
 
-    async def seek_to_committed(self):
+    async def seek(self, topic_partition):
         # This isn't realistic... But it's one way to stop the consumer for our needs.
         raise KafkaError("Seek to commited. Closing...")
 
@@ -189,14 +206,13 @@ class SourcesKafkaMsgHandlerTest(TestCase):
     def test_execute_koku_provider_op_create(self):
         """Test to execute Koku Operations to sync with Sources for creation."""
         source_id = self.aws_source.get("source_id")
-        application_type_id = 2
         provider = Sources(**self.aws_source)
         provider.save()
 
         msg = {"operation": "create", "provider": provider, "offset": provider.offset}
         with patch.object(SourcesHTTPClient, "set_source_status"):
             with patch.object(ProviderAccessor, "cost_usage_source_ready", returns=True):
-                source_integration.execute_koku_provider_op(msg, application_type_id)
+                source_integration.execute_koku_provider_op(msg)
         self.assertIsNotNone(Sources.objects.get(source_id=source_id).koku_uuid)
         self.assertFalse(Sources.objects.get(source_id=source_id).pending_update)
         self.assertEqual(Sources.objects.get(source_id=source_id).koku_uuid, str(provider.source_uuid))
@@ -204,13 +220,12 @@ class SourcesKafkaMsgHandlerTest(TestCase):
     def test_execute_koku_provider_op_destroy(self):
         """Test to execute Koku Operations to sync with Sources for destruction."""
         source_id = self.aws_source.get("source_id")
-        application_type_id = 2
         provider = Sources(**self.aws_source)
         provider.save()
 
         msg = {"operation": "destroy", "provider": provider, "offset": provider.offset}
         with patch.object(SourcesHTTPClient, "set_source_status"):
-            source_integration.execute_koku_provider_op(msg, application_type_id)
+            source_integration.execute_koku_provider_op(msg)
         self.assertEqual(Sources.objects.filter(source_id=source_id).exists(), False)
 
     def test_execute_koku_provider_op_destroy_provider_not_found(self):
@@ -221,7 +236,6 @@ class SourcesKafkaMsgHandlerTest(TestCase):
 
         """
         source_id = self.aws_source.get("source_id")
-        application_type_id = 2
         provider = Sources(**self.aws_source)
         provider.save()
         # check that the source exists
@@ -243,26 +257,25 @@ class SourcesKafkaMsgHandlerTest(TestCase):
         msg = {"operation": "destroy", "provider": provider, "offset": provider.offset}
         with patch.object(SourcesHTTPClient, "set_source_status"):
             with patch.object(ProviderBuilder, "destroy_provider", side_effect=raise_provider_manager_error):
-                source_integration.execute_koku_provider_op(msg, application_type_id)
+                source_integration.execute_koku_provider_op(msg)
                 self.assertTrue(Provider.objects.filter(uuid=provider.source_uuid).exists())
                 self.assertTrue(Sources.objects.filter(source_uuid=provider.source_uuid).exists())
                 self.assertTrue(Sources.objects.filter(koku_uuid=provider.source_uuid).exists())
 
         with patch.object(SourcesHTTPClient, "set_source_status"):
-            source_integration.execute_koku_provider_op(msg, application_type_id)
+            source_integration.execute_koku_provider_op(msg)
         self.assertFalse(Provider.objects.filter(uuid=provider.source_uuid).exists())
 
     def test_execute_koku_provider_op_update(self):
         """Test to execute Koku Operations to sync with Sources for update."""
         source_id = self.aws_source.get("source_id")
-        application_type_id = 2
         provider = Sources(**self.aws_source)
         provider.save()
 
         msg = {"operation": "create", "provider": provider, "offset": provider.offset}
         with patch.object(SourcesHTTPClient, "set_source_status"):
             with patch.object(ProviderAccessor, "cost_usage_source_ready", returns=True):
-                source_integration.execute_koku_provider_op(msg, application_type_id)
+                source_integration.execute_koku_provider_op(msg)
 
         builder = SourcesProviderCoordinator(source_id, provider.auth_header)
 
@@ -290,7 +303,7 @@ class SourcesKafkaMsgHandlerTest(TestCase):
         msg = {"operation": "update", "provider": provider, "offset": provider.offset}
         with patch.object(SourcesHTTPClient, "set_source_status"):
             with patch.object(ProviderAccessor, "cost_usage_source_ready", returns=True):
-                source_integration.execute_koku_provider_op(msg, application_type_id)
+                source_integration.execute_koku_provider_op(msg)
         response = Sources.objects.get(source_id=source_id)
         self.assertEqual(response.pending_update, False)
         self.assertEqual(response.billing_source, {"bucket": "new-bucket"})
@@ -796,14 +809,10 @@ class SourcesKafkaMsgHandlerTest(TestCase):
         ocp_source.save()
 
         with requests_mock.mock() as m:
-            m.get(f"http://www.sources.com/api/v1.0/sources/{test_source_id}", exc=SourcesHTTPClientError)
+            m.get(f"http://www.sources.com/api/v1.0/sources/{test_source_id}", exc=RequestException)
 
-            source_integration.sources_network_info(test_source_id, test_auth_header)
-
-        source_obj = Sources.objects.get(source_id=test_source_id)
-        self.assertIsNone(source_obj.name)
-        self.assertEquals(source_obj.source_type, "")
-        self.assertEquals(source_obj.authentication, {})
+            with self.assertRaises(SourcesHTTPClientError):
+                source_integration.sources_network_info(test_source_id, test_auth_header)
 
     @patch.object(Config, "SOURCES_API_URL", "http://www.sources.com")
     def test_sources_network_info_no_endpoint(self):
@@ -1103,8 +1112,6 @@ class SourcesKafkaMsgHandlerTest(TestCase):
         future_mock.set_result("test result")
         mock_process_message.return_value = future_mock
 
-        run_loop = asyncio.new_event_loop()
-
         cost_management_app_type = 2
 
         test_matrix = [
@@ -1122,9 +1129,8 @@ class SourcesKafkaMsgHandlerTest(TestCase):
 
             mock_consumer = MockKafkaConsumer([msg])
 
-            run_loop.run_until_complete(
-                source_integration.listen_for_messages(mock_consumer, cost_management_app_type, run_loop)
-            )
+            source_integration.listen_for_messages(msg, mock_consumer, cost_management_app_type)
+
             if test.get("expected_process"):
                 mock_process_message.assert_called()
             else:
@@ -1135,8 +1141,6 @@ class SourcesKafkaMsgHandlerTest(TestCase):
         """Test to listen for kafka messages with database errors."""
         future_mock = asyncio.Future()
         future_mock.set_result("test result")
-
-        run_loop = asyncio.new_event_loop()
 
         cost_management_app_type = 2
 
@@ -1166,18 +1170,14 @@ class SourcesKafkaMsgHandlerTest(TestCase):
                 mock_process_message.side_effect = test.get("side_effect")
                 with patch("sources.kafka_listener.connection.close") as close_mock:
                     with patch.object(Config, "RETRY_SECONDS", 0):
-                        run_loop.run_until_complete(
-                            source_integration.listen_for_messages(mock_consumer, cost_management_app_type, run_loop)
-                        )
+                        source_integration.listen_for_messages(msg, mock_consumer, cost_management_app_type)
                         close_mock.assert_called()
 
     @patch("sources.kafka_listener.process_message")
-    def test_listen_for_messages_network_error(self, mock_process_message):
-        """Test to listen for kafka messages with network errors."""
+    def test_listen_for_messages_other_errors(self, mock_process_message):
+        """Test to listen for kafka messages with network errors and source not found."""
         future_mock = asyncio.Future()
         future_mock.set_result("test result")
-
-        run_loop = asyncio.new_event_loop()
 
         cost_management_app_type = 2
 
@@ -1185,7 +1185,11 @@ class SourcesKafkaMsgHandlerTest(TestCase):
             {
                 "test_value": json.dumps({"id": 1, "source_id": 1, "application_type_id": 2}),
                 "side_effect": SourcesHTTPClientError,
-            }
+            },
+            {
+                "test_value": json.dumps({"id": 1, "source_id": 1, "application_type_id": 2}),
+                "side_effect": SourceNotFoundError,
+            },
         ]
 
         for test in test_matrix:
@@ -1202,9 +1206,7 @@ class SourcesKafkaMsgHandlerTest(TestCase):
             mock_process_message.side_effect = test.get("side_effect")
             with patch("sources.kafka_listener.connection.close") as close_mock:
                 with patch.object(Config, "RETRY_SECONDS", 0):
-                    run_loop.run_until_complete(
-                        source_integration.listen_for_messages(mock_consumer, cost_management_app_type, run_loop)
-                    )
+                    source_integration.listen_for_messages(msg, mock_consumer, cost_management_app_type)
                     close_mock.assert_not_called()
 
     @patch("sources.kafka_listener.execute_koku_provider_op")
@@ -1215,10 +1217,7 @@ class SourcesKafkaMsgHandlerTest(TestCase):
         future_mock = asyncio.Future()
         future_mock.set_result("test result")
 
-        run_loop = asyncio.new_event_loop()
-        test_queue = asyncio.PriorityQueue(loop=run_loop)
-
-        cost_management_app_type = 2
+        test_queue = queue.PriorityQueue()
 
         test_matrix = [
             {"test_value": {"operation": "update", "provider": provider}, "side_effect": InterfaceError},
@@ -1229,11 +1228,7 @@ class SourcesKafkaMsgHandlerTest(TestCase):
             mock_process_message.side_effect = test.get("side_effect")
             with patch("sources.kafka_listener.connection.close") as close_mock:
                 with patch.object(Config, "RETRY_SECONDS", 0):
-                    run_loop.run_until_complete(
-                        process_synchronize_sources_msg(
-                            (i, test["test_value"]), test_queue, cost_management_app_type, run_loop
-                        )
-                    )
+                    process_synchronize_sources_msg((i, test["test_value"]), test_queue)
                     close_mock.assert_called()
         for i in range(2):
             priority, _ = test_queue.get_nowait()
@@ -1244,10 +1239,7 @@ class SourcesKafkaMsgHandlerTest(TestCase):
         """Test processing synchronize messages."""
         provider = Sources(**self.aws_source)
 
-        run_loop = asyncio.new_event_loop()
-        test_queue = asyncio.PriorityQueue(loop=run_loop)
-
-        cost_management_app_type = 2
+        test_queue = queue.PriorityQueue()
 
         messages = [
             {"operation": "create", "provider": provider, "offset": provider.offset},
@@ -1256,14 +1248,10 @@ class SourcesKafkaMsgHandlerTest(TestCase):
 
         for msg in messages:
             with patch("sources.storage.clear_update_flag") as mock_clear_flag:
-                run_loop.run_until_complete(
-                    process_synchronize_sources_msg((0, msg), test_queue, cost_management_app_type, run_loop)
-                )
+                process_synchronize_sources_msg((0, msg), test_queue)
                 mock_clear_flag.assert_called()
 
         msg = {"operation": "destroy", "provider": provider}
         with patch("sources.storage.clear_update_flag") as mock_clear_flag:
-            run_loop.run_until_complete(
-                process_synchronize_sources_msg((0, msg), test_queue, cost_management_app_type, run_loop)
-            )
+            process_synchronize_sources_msg((0, msg), test_queue)
             mock_clear_flag.assert_not_called()
